@@ -1,8 +1,8 @@
 # SmartBird — Protocolo de Comunicação
 
 **Projeto:** SmartBird  
-**Versão:** 0.2.2  
-**Status:** Proposta revisada — inclui telemetria dos reservatórios e dos recipientes de alimentação e hidratação; sujeita à validação e aos testes de integração  
+**Versão:** 0.2.3  
+**Status:** Proposta revisada — padroniza o estado binário do pote de hidratação como `adequate` ou `low`; sujeita à validação e aos testes de integração  
 **Controlador principal:** Arduino Mega 2560  
 **Ponte de comunicação:** ESP8266  
 **Transporte externo:** MQTT  
@@ -272,7 +272,7 @@ Consultas rápidas também utilizarão ACK e response para manter um ciclo unifo
     },
     "containers":{
       "food_bowl":{"weight_g":34.5,"valid":true},
-      "water_bowl":{"level_state":"ok","low":false,"valid":true}
+      "water_bowl":{"level_state":"adequate","low":false,"valid":true}
     },
     "maintenance":"normal",
     "rtc":"available"
@@ -280,7 +280,7 @@ Consultas rápidas também utilizarão ACK e response para manter um ciclo unifo
 }
 ```
 
-Os estados são ilustrativos e deverão corresponder às enumerações finais do firmware.
+Os estados são ilustrativos e deverão corresponder às enumerações finais do firmware. Para `containers.water_bowl.level_state`, os únicos valores válidos são `low` (nível baixo) e `adequate` (nível adequado). O campo booleano `low` é mantido como conveniência para consultas rápidas: `true` quando `level_state` for `low` e `false` quando for `adequate`. Quando `valid` for `false`, `level_state` deverá ser `null` e `low` também deverá ser `null`, pois não há leitura confiável.
 
 ### 8.2. `get_telemetry` — consultar leituras
 
@@ -322,7 +322,7 @@ Os estados são ilustrativos e deverão corresponder às enumerações finais do
 
 Valores fictícios. `reservoirs` representa os recipientes de armazenamento que fornecem alimento e água aos mecanismos. `containers` representa os recipientes acessíveis às aves. Os campos `valid` indicam se a leitura correspondente pôde ser obtida e considerada utilizável pelo firmware; não devem ser substituídos por zero quando a leitura estiver indisponível.
 
-O pote de alimentação é monitorado por célula de carga e seu valor é expresso em gramas (`weight_g`), não em porcentagem. O bebedouro é monitorado por uma boia de dois fios e fornece somente um estado binário: `low` ou `ok`. Não existe medição percentual do nível do bebedouro.
+O pote de alimentação é monitorado por célula de carga e seu valor é expresso em gramas (`weight_g`), não em porcentagem. O bebedouro é monitorado por uma boia de dois fios e fornece somente um estado binário: `low` ou `adequate`. Não existe medição percentual do nível do bebedouro.
 
 A boia utiliza entrada digital com `INPUT_PULLUP`: no hardware atualmente testado, contato fechado (`LOW`) significa nível baixo e contato aberto (`HIGH`) significa nível adequado. Como uma boia simples de dois fios não permite distinguir eletricamente um recipiente cheio de um fio rompido/ desconectado, `valid` não representa diagnóstico completo de integridade do cabo ou do sensor. Essa limitação deverá ser considerada na interface e nos testes.
 
@@ -447,7 +447,7 @@ O painel Web bloqueia o envio de `feed_manual` quando o reservatório está em n
 }
 ```
 
-A bomba deverá ser interrompida quando a boia indicar nível adequado, quando o tempo máximo for excedido ou quando ocorrer falha que impeça a operação segura. O nível do bebedouro é binário (`low`/`ok`), não percentual. A disponibilidade de água no reservatório de origem é verificada separadamente pelo sensor ultrassônico.
+A bomba deverá ser interrompida quando a boia indicar nível adequado, quando o tempo máximo for excedido ou quando ocorrer falha que impeça a operação segura. O nível do pote de hidratação é binário (`low`/`adequate`), não percentual. A disponibilidade de água no reservatório de origem é verificada separadamente pelo sensor ultrassônico.
 
 ### 9.3. `ack_cleaning` — confirmar limpeza
 
@@ -649,7 +649,7 @@ A estrutura deverá separar explicitamente os reservatórios de armazenamento do
 | `reservoirs.food` | Reservatório de alimento | HC-SR04 | Percentual, distância e validade |
 | `reservoirs.water` | Reservatório de água que abastece a bomba | HC-SR04 | Percentual, distância e validade |
 | `containers.food_bowl` | Pote de alimento acessível à ave | Célula de carga + HX711 | Peso em gramas e validade |
-| `containers.water_bowl` | Bebedouro acessível à ave | Boia de dois fios | Estado `low` ou `ok` e validade da leitura |
+| `containers.water_bowl` | Bebedouro acessível à ave | Boia de dois fios | Estado `low` ou `adequate` e validade da leitura |
 
 **Exemplo — Arduino → Web**
 
@@ -666,20 +666,20 @@ A estrutura deverá separar explicitamente os reservatórios de armazenamento do
     },
     "containers":{
       "food_bowl":{"weight_g":34.5,"valid":true},
-      "water_bowl":{"level_state":"ok","low":false,"valid":true}
+      "water_bowl":{"level_state":"adequate","low":false,"valid":true}
     },
     "feeding":{"state":"idle","bowl_weight_g":34.5,"gate_open":false},
-    "watering":{"state":"idle","bowl_level":"ok","pump_on":false},
+    "watering":{"state":"idle","bowl_level":"adequate","pump_on":false},
     "maintenance":{"cleaning_due":false}
   }
 }
 ```
 
-Valores fictícios. `level_percent` aplica-se somente aos reservatórios monitorados por HC-SR04. `weight_g` aplica-se somente ao pote de alimentação. `level_state` do bebedouro aceita `low` ou `ok`; não deve ser representado como porcentagem, volume ou peso.
+Valores fictícios. `level_percent` aplica-se somente aos reservatórios monitorados por HC-SR04. `weight_g` aplica-se somente ao pote de alimentação. `level_state` do pote de hidratação aceita `low` ou `adequate`; não deve ser representado como porcentagem, volume ou peso.
 
 A boia atualmente é lida com `INPUT_PULLUP`: `LOW` corresponde a nível baixo e `HIGH` a nível adequado. A leitura binária não permite estimar quanto falta para encher o bebedouro. Além disso, um fio desconectado pode produzir a mesma leitura elétrica de nível adequado; o protocolo não deverá afirmar que esse tipo de falha foi diagnosticado.
 
-Quando uma leitura não puder ser obtida ou validada, o firmware deverá informar `valid:false` e não deverá converter a ausência de leitura em zero, `low:true` ou `ok`. Para o bebedouro, a capacidade de detectar falha física da boia é limitada pelo circuito de dois fios atualmente utilizado.
+Quando uma leitura não puder ser obtida ou validada, o firmware deverá informar `valid:false` e não deverá converter a ausência de leitura em zero, `low:true` ou `adequate`. Nessa situação, `level_state` e `low` deverão ser `null`. Para o bebedouro, a capacidade de detectar falha física da boia é limitada pelo circuito de dois fios atualmente utilizado.
 
 `watering.pump_on` representa o estado lógico do acionamento. Não é sensor de fluxo e não comprova que a água está efetivamente sendo bombeada. A interface deverá distinguir estado comandado de confirmação física, caso futuramente seja instalado um sensor de fluxo.
 
@@ -715,7 +715,7 @@ Eventos são mensagens espontâneas emitidas pelo Arduino para comunicar ocorrê
 {
   "v":"1.0","type":"event","source":"arduino",
   "timestamp":"2026-11-10T14:35:00-03:00",
-  "data":{"name":"watering_completed","origin":"automatic","container":"water_bowl","level_state":"ok"}
+  "data":{"name":"watering_completed","origin":"automatic","container":"water_bowl","level_state":"adequate"}
 }
 ```
 
@@ -753,7 +753,7 @@ O evento do bebedouro não inclui percentual, distância ou volume, pois a boia 
 
 O peso do pote deverá ser informado na telemetria em gramas. Um evento `food_bowl_low` somente poderá ser emitido quando o projeto definir e implementar um limite mínimo de peso; esse limite ainda não está definido no firmware atual.
 
-Para evitar notificações repetidas, eventos de nível deverão preferencialmente ser emitidos na transição de estado (por exemplo, de `ok` para `low`) e não a cada leitura periódica. A estratégia final de deduplicação e reenvio permanece sujeita à implementação.
+Para evitar notificações repetidas, eventos de nível deverão preferencialmente ser emitidos na transição de estado (por exemplo, de `adequate` para `low`) e não a cada leitura periódica. A estratégia final de deduplicação e reenvio permanece sujeita à implementação.
 
 ### 13.5. Limpeza pendente
 
@@ -865,7 +865,7 @@ Convenção externa proposta:
 
 `idle` não significa ausência de alertas. Estado operacional e condição de alerta deverão ser apresentados separadamente quando necessário.
 
-Além do estado de execução dos módulos, a Web deverá apresentar separadamente as condições dos recipientes: nível percentual dos reservatórios de origem, peso em gramas do pote de alimento e estado binário (`low`/`ok`) do bebedouro. `watering.completed` significa que a boia indicou nível adequado e o comando da bomba foi desligado; não representa um percentual-alvo atingido.
+Além do estado de execução dos módulos, a Web deverá apresentar separadamente as condições dos recipientes: nível percentual dos reservatórios de origem, peso em gramas do pote de alimento e estado binário (`low`/`adequate`) do pote de hidratação. `watering.completed` significa que a boia indicou nível adequado e o comando da bomba foi desligado; não representa um percentual-alvo atingido.
 
 ## 16. Tópicos MQTT
 
@@ -1031,7 +1031,7 @@ O ESP8266 não implementa regras de alimentação, hidratação, agenda ou manut
 | `0.1.0` | Estrutura inicial, tipos de mensagem, comandos e regras preliminares |
 | `0.2.0` | Arquitetura de ponte ESP8266 transparente; tópicos MQTT; ciclo Request/ACK/Response; protocolos de configuração, eventos, telemetria e sincronização RTC iniciada pela Web |
 | `0.2.1` | Adaptação para ESP8266 NodeMCU V3; redução da UART para 9600 baud via SoftwareSerial (pinos D5 e D6); fixação do buffer UART em 1024 bytes; consolidação para apenas 2 tópicos MQTT (`comandos` e `status`); definição de QoS (1 e 0) e proibição de mensagens retidas (retained) |
-| `0.2.2` | Inclusão explícita dos níveis dos recipientes de consumo; distinção entre reservatórios ultrassônicos, pote de alimento medido em gramas e bebedouro monitorado por boia binária; revisão de telemetria, consulta, eventos, estados e configuração de hidratação |
+| `0.2.2` | Inclusão explícita dos níveis dos recipientes de consumo; distinção entre reservatórios ultrassônicos, pote de alimento medido em gramas e bebedouro monitorado por boia binária; revisão de telemetria, consulta, eventos, estados e configuração de hidratação |\n| `0.2.3` | Padronização dos estados do pote de hidratação para `low` e `adequate` em consultas, telemetria, eventos e estados operacionais; atualização dos exemplos e critérios de validação |
 | `1.0.0` | A definir após validação da equipe e testes de integração |
 
 ## 23. Manutenção do documento
@@ -1042,8 +1042,4 @@ A implementação deverá seguir este documento. Se os testes exigirem mudanças
 
 ---
 
-**Fim do documento — SmartBird Protocolo de Comunicação v0.2.2**
-
-
-
-
+**Fim do documento — SmartBird Protocolo de Comunicação v0.2.3**
