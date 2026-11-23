@@ -3,22 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1B4332">
+  <meta name="theme-color" content="#123F32">
   <meta name="description" content="Painel SmartBird para acompanhar os reservatórios, operar a gaiola e programar as rotinas de alimentação e hidratação.">
   <meta name="page-type" content="software">
   <meta name="site-kind" content="software">
   <title>SmartBird | Painel da gaiola</title>
   <link rel="icon" type="image/jpeg" href="Logo_SmartBird.jpg">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    if (window.tailwind) {
-      tailwind.config = { theme: { extend: { colors: {
-        'sb-beige': '#F7F4EB', 'sb-beige-dark': '#EFECE1', 'sb-green-dark': '#1B4332',
-        'sb-green': '#2D6A4F', 'sb-green-light': '#40916C', 'sb-orange': '#F77F00',
-        'sb-orange-dark': '#E36414', 'sb-red': '#D62828'
-      } } } };
-    }
-  </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
@@ -56,30 +46,30 @@
           </div>
         </details>
         <p id="login-error" class="error-text" role="alert" hidden></p>
-        <button id="connect" class="button primary full" type="submit"><span id="connect-label">Conectar à gaiola</span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+        <button id="connect" class="button primary full" type="submit"><i class="fa-solid fa-link" aria-hidden="true"></i><span id="connect-label">Conectar à gaiola</span></button>
       </form>
     </div>
   </main>
 
   <div id="dashboard-app" hidden>
     <header class="app-header">
-      <div class="topbar wrap">
+      <div class="topbar">
         <a class="skip-link" href="#workspace">Ir para o conteúdo</a>
         <div class="app-brand"><img src="Logo_SmartBird_web.jpg" alt="" width="38" height="38"><span>SmartBird</span></div>
         <nav id="navigation" class="app-nav" aria-label="Navegação principal">
-          <button class="nav-link" type="button" data-view="dashboard" aria-current="page"><i class="fa-solid fa-table-columns" aria-hidden="true"></i><span>Dashboard</span></button>
-          <button class="nav-link" type="button" data-view="schedules"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span>Agendamentos</span></button>
+          <button class="nav-link" type="button" data-view="dashboard" aria-current="page"><i class="fa-solid fa-house" aria-hidden="true"></i><span>Dashboard</span></button>
+          <button class="nav-link" type="button" data-view="schedules"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i><span>Agendamentos</span></button>
           <button class="nav-link" type="button" data-view="settings"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>Configurações</span></button>
           <button class="nav-link" type="button" data-view="diagnostics"><i class="fa-solid fa-terminal" aria-hidden="true"></i><span>Diagnóstico</span></button>
         </nav>
         <div class="top-actions">
-          <button class="icon-button header-events" type="button" data-open-events aria-label="Notificações" aria-haspopup="dialog"><i class="fa-regular fa-bell" aria-hidden="true"></i><span class="counter" data-unread aria-hidden="true" hidden></span></button>
-          <button id="logout" class="button quiet" type="button"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i> Sair</button>
+          <button class="button quiet header-events" type="button" data-open-events aria-label="Notificações" aria-haspopup="dialog"><i class="fa-solid fa-bell" aria-hidden="true"></i><span class="header-action-label">Notificações</span><span class="counter" data-unread aria-hidden="true" hidden></span></button>
+          <button id="logout" class="button quiet" type="button"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sair</span></button>
         </div>
       </div>
     </header>
 
-    <main id="workspace" class="workspace wrap" tabindex="-1">
+    <main id="workspace" class="workspace" tabindex="-1">
       <div class="workspace-context">
         <p class="device-label"><i class="fa-solid fa-microchip" aria-hidden="true"></i><span>Dispositivo <strong id="active-device"></strong></span></p>
         <span id="connection-badge" class="badge neutral" role="status"></span>
@@ -91,25 +81,37 @@
       </div>
 
       <section id="view-dashboard" class="view" aria-labelledby="dashboard-title">
-        <div class="view-head">
+        <div class="view-head dashboard-head">
           <div><h1 id="dashboard-title" tabindex="-1">Dashboard</h1><p id="last-update">Aguardando a primeira leitura do equipamento.</p></div>
           <div class="actions">
             <button id="refresh" class="button" type="button"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Atualizar dados</button>
-            <button id="sync" class="button primary" type="button">Sincronizar relógio (RTC)</button>
+            <button id="sync" class="button primary" data-icon="clock" type="button">Sincronizar relógio (RTC)</button>
           </div>
         </div>
-        <div class="system-strip surface">
-          <div><span>Sistema</span><strong id="system-state" class="badge neutral" role="status">Aguardando status</strong></div>
-          <div><span>Relógio</span><strong id="rtc-state" class="badge neutral" role="status">Aguardando status</strong></div>
-          <div><span>Ponte</span><strong>ESP8266 · UART 9600</strong></div>
-          <div><span>Controlador</span><strong>Arduino Mega 2560</strong></div>
+        <div class="system-strip" role="group" aria-label="Indicadores do equipamento">
+          <div class="surface system-stat">
+            <span class="icon-box"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span>
+            <div><h2>Sistema</h2><strong id="system-state" class="badge neutral" role="status">Aguardando status</strong></div>
+          </div>
+          <div class="surface system-stat">
+            <span class="icon-box"><i class="fa-solid fa-clock" aria-hidden="true"></i></span>
+            <div><h2>Relógio (RTC)</h2><strong id="rtc-state" class="badge neutral" role="status">Aguardando status</strong></div>
+          </div>
+          <div class="surface system-stat">
+            <span class="icon-box"><i class="fa-solid fa-wifi" aria-hidden="true"></i></span>
+            <div><h2>Ponte</h2><strong>ESP8266 <span class="stat-detail">· UART 9600</span></strong></div>
+          </div>
+          <div class="surface system-stat">
+            <span class="icon-box"><i class="fa-solid fa-microchip" aria-hidden="true"></i></span>
+            <div><h2>Controlador</h2><strong>Arduino Mega 2560</strong></div>
+          </div>
         </div>
         <div class="view-group">
-          <h2 class="group-title">Reservatórios de origem</h2>
+          <h2 class="group-title"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>Reservatórios de origem</h2>
           <div id="reservoirs" class="card-grid"></div>
         </div>
         <div class="view-group">
-          <h2 class="group-title">Recipientes de consumo</h2>
+          <h2 class="group-title consumption-title"><i class="fa-solid fa-chart-column" aria-hidden="true"></i>Recipientes de consumo</h2>
           <div class="card-grid">
             <article id="food-bowl" class="surface measurement container-reading" data-category="food">
               <div class="reservoir-details">
@@ -129,23 +131,23 @@
           </div>
         </div>
         <div class="view-group">
-          <h2 class="group-title">Ações manuais</h2>
+          <h2 class="group-title"><i class="fa-solid fa-bolt" aria-hidden="true"></i>Ações manuais</h2>
           <div class="card-grid">
             <article class="surface operation" data-category="food">
               <div class="card-heading"><span class="icon-box"><i class="fa-solid fa-seedling" aria-hidden="true"></i></span><div><h3>Alimentação</h3><span id="feeding-state" class="badge neutral" role="status">Aguardando status</span></div></div>
-              <button id="feed" class="button accent" type="button" aria-haspopup="dialog">Alimentar agora</button>
+              <button id="feed" class="button accent" data-icon="play" type="button" aria-haspopup="dialog">Alimentar agora</button>
             </article>
             <article class="surface operation" data-category="water">
-              <div class="card-heading"><span class="icon-box"><i class="fa-solid fa-faucet-drip" aria-hidden="true"></i></span><div><h3>Hidratação</h3><span id="watering-state" class="badge neutral" role="status">Aguardando status</span><p id="pump-status" class="actuator-status muted"></p></div></div>
-              <button id="water" class="button primary" type="button" aria-haspopup="dialog">Repor água agora</button>
+              <div class="card-heading"><span class="icon-box"><i class="fa-solid fa-droplet" aria-hidden="true"></i></span><div><h3>Hidratação</h3><span id="watering-state" class="badge neutral" role="status">Aguardando status</span><p id="pump-status" class="actuator-status muted"></p></div></div>
+              <button id="water" class="button water" data-icon="play" type="button" aria-haspopup="dialog">Repor água agora</button>
             </article>
           </div>
         </div>
         <div class="view-group">
-          <h2 class="group-title">Manutenção</h2>
-          <article class="surface operation maintenance">
+          <h2 class="group-title"><i class="fa-solid fa-broom" aria-hidden="true"></i>Manutenção</h2>
+          <article class="surface operation maintenance" data-category="maintenance">
             <div class="card-heading"><span class="icon-box"><i class="fa-solid fa-broom" aria-hidden="true"></i></span><div><h3>Higienização da gaiola</h3><span id="cleaning-state" class="badge neutral" role="status">Aguardando status</span></div></div>
-            <button id="cleaning" class="button primary" type="button">Confirmar limpeza realizada</button>
+            <button id="cleaning" class="button primary" data-icon="check" type="button">Confirmar limpeza realizada</button>
           </article>
         </div>
       </section>
@@ -157,9 +159,12 @@
         </div>
         <div id="schedule-panels" class="card-grid"></div>
         <div class="section-actions schedule-actions">
-          <p id="schedule-status" class="status-line neutral" role="status"></p>
+          <div class="save-status">
+            <p id="schedule-status" class="status-line neutral" role="status"></p>
+            <p id="schedule-feedback" class="status-line" hidden></p>
+          </div>
           <button id="discard-schedule" class="button" type="button" hidden>Descartar rascunho</button>
-          <button id="save-schedule" class="button primary" type="button">Salvar alterações</button>
+          <button id="save-schedule" class="button primary" type="button"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>Salvar alterações</button>
         </div>
       </section>
 
@@ -168,20 +173,22 @@
         <div id="config-panels" class="settings-grid">
           <aside class="settings-reference" aria-label="Referência do equipamento">
             <article class="surface panel config-panel" data-category="water">
-              <h2 class="panel-title"><span class="icon-box"><i class="fa-solid fa-faucet-drip" aria-hidden="true"></i></span>Hidratação</h2>
+              <h2 class="panel-title"><span class="icon-box"><i class="fa-solid fa-droplet" aria-hidden="true"></i></span>Hidratação</h2>
               <dl class="settings-facts">
-                <div><dt>Bebedouro</dt><dd>Boia com leitura de nível baixo ou adequado</dd></div>
-                <div><dt>Reservatório de origem</dt><dd>Verifica a água disponível para a bomba</dd></div>
-                <div><dt>Bombeamento contínuo</dt><dd>Até 15 segundos</dd></div>
+                <div><dt><i class="fa-solid fa-glass-water" aria-hidden="true"></i>Bebedouro</dt><dd>A boia informa se o nível está baixo ou adequado.</dd></div>
+                <div><dt><i class="fa-solid fa-water" aria-hidden="true"></i>Reservatório de origem</dt><dd>Armazena a água que abastece a bomba.</dd></div>
+                <div><dt><i class="fa-solid fa-stopwatch" aria-hidden="true"></i>Bombeamento contínuo</dt><dd>Até 15 segundos por acionamento contínuo.</dd></div>
               </dl>
-              <p class="muted settings-note">A configuração de hidratação pela Web está pendente no protocolo.</p>
+              <p class="settings-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>Os parâmetros acima são referências. A edição da configuração de hidratação pela Web está pendente no protocolo.</p>
             </article>
             <details class="surface config-reference">
               <summary class="config-reference-toggle">
-                <span class="panel-title"><i class="fa-solid fa-ruler-vertical" aria-hidden="true"></i> Cálculo ultrassônico</span>
+                <span class="icon-box"><i class="fa-solid fa-ruler-vertical" aria-hidden="true"></i></span>
+                <span><strong>Cálculo ultrassônico</strong><span class="reference-summary">Medição dos reservatórios de origem</span></span>
                 <span class="reading-chevron" aria-hidden="true"></span>
               </summary>
               <div class="config-reference-content">
+                <p>O sensor mede a distância até a superfície da água ou da ração. As fórmulas estimam a altura do conteúdo e o percentual ocupado no reservatório.</p>
                 <code>alturaConteudo = distanciaReferencia − distanciaMedida</code>
                 <code>percentualNivel = (alturaConteudo / alturaUtil) × 100</code>
               </div>
