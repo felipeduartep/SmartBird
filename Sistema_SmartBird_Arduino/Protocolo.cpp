@@ -112,7 +112,16 @@ void enviarAck(const char* id, const char* status) {
     resposta["source"] = "arduino";
     resposta["status"] = status;
 
-    enviarDocumento(resposta);
+    Serial.print("[ACK] Tentando enviar: ");
+    Serial.println(status);
+
+    bool enviado = enviarDocumento(resposta);
+
+    if (enviado) {
+      Serial.println("[ACK] Mensagem encaminhada para comunicacao.");
+    } else {
+      Serial.println("[ERRO] Falha ao montar ou enviar ACK!");
+}
 }
 
 void enviarResponseDados(const char* id, JsonDocument& dados) {
@@ -491,12 +500,13 @@ uint8_t diasNoMes(int ano, uint8_t mes) {
 // CONVERSÃO DE DATA/HORA
 // =====================================================
 
-// Recebe horário local no formato YYYY-MM-DDTHH:MM:SS.
-// Não aceita Z ou offset: o RTC do projeto trabalha com horário local.
+// Recebe YYYY-MM-DDTHH:MM:SS±HH:MM. Os componentes de data/hora
+// representam o horário de parede local enviado pela Web; o offset é
+// validado como metadado e não é convertido para UTC no RTC local.
 
 bool parseDateTimeLocal(const char* texto, DateTime& dataHora) {
 
-    if (!texto || strlen(texto) != 19) {
+    if (!texto || strlen(texto) != 25) {
         return false;
     }
 
@@ -505,7 +515,9 @@ bool parseDateTimeLocal(const char* texto, DateTime& dataHora) {
         texto[7] != '-' ||
         texto[10] != 'T' ||
         texto[13] != ':' ||
-        texto[16] != ':'
+        texto[16] != ':' ||
+        (texto[19] != '+' && texto[19] != '-') ||
+        texto[22] != ':'
     ) {
         return false;
     }
@@ -516,7 +528,9 @@ bool parseDateTimeLocal(const char* texto, DateTime& dataHora) {
         8, 9,
         11, 12,
         14, 15,
-        17, 18
+        17, 18,
+        20, 21,
+        23, 24
     };
 
     for (uint8_t i = 0; i < sizeof(indices); i++) {
@@ -570,6 +584,15 @@ bool parseDateTimeLocal(const char* texto, DateTime& dataHora) {
         return false;
     }
 
+    const uint8_t offsetHora =
+        (texto[20] - '0') * 10 + (texto[21] - '0');
+    const uint8_t offsetMinuto =
+        (texto[23] - '0') * 10 + (texto[24] - '0');
+    if (offsetHora > 14 || offsetMinuto > 59 ||
+        (offsetHora == 14 && offsetMinuto != 0)) {
+        return false;
+    }
+
     dataHora = DateTime(
         ano,
         mes,
@@ -593,6 +616,8 @@ void processarMensagem(
     DadosSistema& dados
 ) {
 
+    Serial.println("[PROTOCOLO] Iniciando analise da mensagem...");
+
     if (!mensagem || !*mensagem) {
         enviarErro(nullptr, "INVALID_MESSAGE", "Empty message");
         return;
@@ -604,15 +629,24 @@ void processarMensagem(
         deserializeJson(requisicao, mensagem);
 
     if (erroJson) {
-        enviarErro(nullptr, "INVALID_JSON", "JSON could not be parsed");
-        return;
+      Serial.println("[ERRO] JSON invalido!");
+      enviarErro(nullptr, "INVALID_JSON", "JSON could not be parsed");
+      return;
     }
+
+    Serial.println("[PROTOCOLO] JSON interpretado com sucesso.");
 
     const char* versao = requisicao["v"] | "";
     const char* tipo = requisicao["type"] | "";
     const char* id = requisicao["id"] | "";
     const char* origem = requisicao["source"] | "";
     const char* acao = requisicao["action"] | "";
+
+    Serial.print("[PROTOCOLO] ID: ");
+    Serial.println(id);
+
+    Serial.print("[PROTOCOLO] Acao: ");
+    Serial.println(acao);
 
     if (strcmp(versao, "1.0") != 0) {
         enviarErro(
@@ -864,42 +898,35 @@ void processarMensagem(
     // =================================================
 
     if (strcmp(acao, "set_feeding_config") == 0) {
-
-        if (
-            !data["target_weight_g"].is<float>() &&
-            !data["target_weight_g"].is<int>()
-        ) {
-
+        if ((!data["target_weight_g"].is<float>() &&
+             !data["target_weight_g"].is<int>()) ||
+            (!data["max_duration_ms"].is<uint32_t>() &&
+             !data["max_duration_ms"].is<unsigned long>() &&
+             !data["max_duration_ms"].is<int>())) {
             enviarAck(id, "rejected");
             return;
         }
 
-        float pesoAlvo =
-            data["target_weight_g"].as<float>();
+        const float pesoAlvo = data["target_weight_g"].as<float>();
+        const uint32_t tempoMaximo = data["max_duration_ms"].as<uint32_t>();
 
-        if (
-            !isfinite(pesoAlvo) ||
-            pesoAlvo < 1.0f ||
-            pesoAlvo > 500.0f ||
-            data.containsKey("max_duration_ms")
-        ) {
-
+        if (!isfinite(pesoAlvo) || pesoAlvo < 1.0f || pesoAlvo > 500.0f ||
+            tempoMaximo < 1000UL || tempoMaximo > 120000UL ||
+            (dados.alimentacao.estado == EstadoAlimentacao::ALIMENTANDO ||
+             dados.alimentacao.estado == EstadoAlimentacao::VERIFICANDO_PESO)) {
             enviarAck(id, "rejected");
             return;
         }
 
-        dados.configuracaoAlimentacao.pesoAlvoGramas =
-            pesoAlvo;
+        dados.configuracaoAlimentacao.pesoAlvoGramas = pesoAlvo;
+        dados.configuracaoAlimentacao.tempoMaximoMs = tempoMaximo;
 
         enviarAck(id, "accepted");
-
         JsonDocument resposta;
-
         resposta["data"]["configuration_updated"] = true;
         resposta["data"]["target_weight_g"] = pesoAlvo;
-
+        resposta["data"]["max_duration_ms"] = tempoMaximo;
         enviarResponseDados(id, resposta);
-
         return;
     }
 
