@@ -16,19 +16,34 @@
   };
   const CONFIG_GROUPS = {
     feeding: [
-      { title: 'Dosagem', fields: [
-        ['target_weight_g', 'Peso-alvo (g)', 20],
-        ['max_duration_ms', 'Tempo máximo do servo (ms)', 5000, 'integer']
-      ] },
-      { title: 'Calibração do reservatório', fields: [
-        ['reference_distance_cm', 'Distância de referência (cm)', 25],
-        ['useful_height_cm', 'Altura útil (cm)', 20],
-        ['low_threshold_percent', 'Limiar de nível baixo (%)', 20, 'percent'],
-        ['full_threshold_percent', 'Limiar de nível cheio (%)', 95, 'percent']
-      ] },
-      { title: 'Higienização', fields: [
-        ['cleaning_interval_seconds', 'Intervalo de limpeza (h)', 48 * SECONDS_PER_HOUR, 'integer', SECONDS_PER_HOUR]
-      ] }
+      {
+        title: 'Dosagem',
+        icon: 'scale-balanced',
+        hint: 'Peso-alvo de 1 a 500 g. O tempo do servo é uma referência local.',
+        fields: [
+          ['target_weight_g', 'Peso-alvo (g)', 20],
+          ['max_duration_ms', 'Tempo máximo do servo (ms)', 5000, 'integer']
+        ]
+      },
+      {
+        title: 'Calibração do reservatório',
+        icon: 'ruler-vertical',
+        hint: 'A altura útil deve ser menor ou igual à distância de referência. Use limiares de 0 a 100%, com o baixo menor que o cheio.',
+        fields: [
+          ['reference_distance_cm', 'Distância de referência (cm)', 25],
+          ['useful_height_cm', 'Altura útil (cm)', 20],
+          ['low_threshold_percent', 'Limiar de nível baixo (%)', 20, 'percent'],
+          ['full_threshold_percent', 'Limiar de nível cheio (%)', 95, 'percent']
+        ]
+      },
+      {
+        title: 'Higienização',
+        icon: 'broom',
+        hint: 'Intervalo de referência entre os lembretes de limpeza.',
+        fields: [
+          ['cleaning_interval_seconds', 'Intervalo de limpeza (h)', 48 * SECONDS_PER_HOUR, 'integer', SECONDS_PER_HOUR]
+        ]
+      }
     ]
   };
   const CONFIG_FIELDS = Object.fromEntries(Object.entries(CONFIG_GROUPS).map(
@@ -76,7 +91,7 @@
   const scheduleActions = ['get_schedule', 'set_schedule', 'remove_schedule'];
   const STATUS_ICONS = {
     neutral: 'circle-minus', success: 'circle-check', warning: 'triangle-exclamation',
-    danger: 'circle-exclamation', info: 'circle-info'
+    danger: 'circle-exclamation', info: 'circle-info', progress: 'circle-play'
   };
   const makeIcon = (name, extraClass = '') => {
     const icon = document.createElement('i');
@@ -341,6 +356,7 @@
         timer: setTimeout(() => this.timeout(id), CONFIG_TIMEOUTS.ACK_TIMEOUT_MS)
       };
       pendingCommands.set(id, command);
+      UIController.commandFeedback(action);
       try {
         const simulated = Boolean(diagnostics.active?.());
         diagnostics.log?.('TX', mqtt_client.topic('comandos'), payload, simulated ? 'Simulador' : 'MQTT');
@@ -348,6 +364,7 @@
         else mqtt_client.publish(payload);
       } catch {
         this.finish(command);
+        UIController.commandFeedback(action, 'Falha no envio da solicitação.');
         ToastService.show('Falha no envio', 'O comando não pôde ser enviado. Consulte o status do equipamento.', 'danger');
         return false;
       }
@@ -365,8 +382,10 @@
       const awaitingAck = command.state === 'waiting_ack';
       this.finish(command);
       if (awaitingAck) {
+        UIController.commandFeedback(command.action, 'O equipamento não respondeu à solicitação.');
         ToastService.show('Sem resposta do equipamento', command.action + ' · Timeout de ACK. Verifique se o ESP8266/Arduino está online.', 'danger');
       } else {
+        UIController.commandFeedback(command.action, 'O resultado da solicitação continua sem confirmação.', 'warning');
         ToastService.show('Resultado desconhecido', command.action + ' · Tempo de confirmação excedido. Consulte o status antes de tentar novamente.', 'warning', UIController.refresh);
       }
     },
@@ -374,7 +393,12 @@
       if (showNotice && pendingCommands.size) {
         ToastService.show('Conexão interrompida', 'Há comandos sem confirmação. Consulte o status antes de repetir uma operação.', 'warning', UIController.refresh);
       }
-      for (const command of pendingCommands.values()) clearTimeout(command.timer);
+      for (const command of pendingCommands.values()) {
+        clearTimeout(command.timer);
+        if (showNotice) {
+          UIController.commandFeedback(command.action, 'Conexão interrompida. A última solicitação segue sem confirmação.', 'warning');
+        }
+      }
       pendingCommands.clear();
     }
   };
@@ -408,6 +432,7 @@
       if (message.type === 'ack' && command.state === 'waiting_ack') {
         if (message.status === 'rejected') {
           command_service.finish(command);
+          UIController.commandFeedback(command.action, 'A última solicitação foi recusada.');
           this.showError('Comando recusado', message.error);
         } else if (message.status === 'accepted') {
           clearTimeout(command.timer);
@@ -424,10 +449,12 @@
             AppState.equipment.status[module] = 'error';
             UIController.render();
           }
+          UIController.commandFeedback(command.action, 'A última solicitação falhou.');
           this.showError('Falha em ' + command.action, message.error);
           return;
         }
         if (!this.apply(command, message.data)) {
+          UIController.commandFeedback(command.action, 'A resposta recebida não confirmou a solicitação.', 'warning');
           ToastService.show('Confirmação incompleta', 'A resposta de ' + command.action + ' não contém os dados previstos pelo protocolo.', 'danger');
           return;
         }
@@ -833,11 +860,15 @@
         conflict ? ['A agenda do equipamento mudou. Descarte o rascunho para editar a versão atual.', 'warning'] :
         loading ? ['Consultando agenda…', 'info'] : scheduleStale ? ['Consulte a agenda antes de salvar.', 'warning'] :
         slotWarning ? [slotWarning, 'warning'] :
-        this.dirty() ? ['Alterações aguardando envio.', 'warning'] : draft ? ['Agenda confirmada pelo equipamento.', 'success'] :
+        this.dirty() ? ['Alterações aguardando envio.', 'warning'] :
+        draft ? [diagnostics.active?.() ? 'Agenda confirmada pelo simulador.' : 'Agenda confirmada pelo equipamento.', 'success'] :
         ['Aguardando a agenda do equipamento.', 'neutral'];
       UIController.setStatus($('schedule-status'), ...status);
       const signature = JSON.stringify([draft, locked]);
-      if (signature === this.lastRender && draft === this.renderedDraft) return;
+      if (signature === this.lastRender && draft === this.renderedDraft) {
+        ScheduleTimeline.render();
+        return;
+      }
       this.lastRender = signature;
       this.renderedDraft = draft;
       const container = $('schedule-panels');
@@ -848,11 +879,12 @@
         const card = document.createElement('article');
         const schedule = draft?.[module];
         card.className = 'surface panel schedule-panel';
+        card.dataset.module = module;
         card.dataset.category = module === 'feeding' ? 'food' : 'water';
         card.innerHTML = `
           <header class="schedule-heading">
             <div class="card-heading">
-              <span class="icon-box"><i class="fa-solid fa-${module === 'feeding' ? 'seedling' : 'faucet-drip'}" aria-hidden="true"></i></span>
+              <span class="icon-box"><i class="fa-solid fa-${module === 'feeding' ? 'seedling' : 'droplet'}" aria-hidden="true"></i></span>
               <div><h2>${info.label}</h2><p class="muted schedule-count"></p></div>
             </div>
             <label class="check switch schedule-switch">
@@ -860,9 +892,24 @@
               <input type="checkbox" role="switch" aria-label="Rotina automática de ${info.label.toLowerCase()}">
             </label>
           </header>
-          <div class="schedule-timeline" aria-hidden="true" hidden>
-            <div class="schedule-track"></div>
-            <div class="schedule-ticks"><span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>24h</span></div>
+          <div class="schedule-timeline">
+            <div class="schedule-clock">
+              <span class="schedule-period">
+                <i class="fa-solid fa-sun" aria-hidden="true"></i>
+                <i class="fa-solid fa-moon" aria-hidden="true"></i>
+                <span class="schedule-period-label"></span>
+              </span>
+              <span>Agora <time class="schedule-now-time"></time><small>Hora local</small></span>
+            </div>
+            <div class="schedule-axis" aria-hidden="true">
+              <div class="schedule-track"><span class="schedule-now"></span></div>
+              <div class="schedule-ticks"><span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>24h</span></div>
+            </div>
+          </div>
+          <div class="schedule-next" hidden>
+            <span class="icon-box"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
+            <div><span class="schedule-next-label"></span><strong><span class="schedule-next-day"></span><time class="schedule-next-time"></time></strong></div>
+            <span class="schedule-countdown"></span>
           </div>
           <div class="schedule-slots">
             <ul class="time-list" aria-label="Horários de ${info.label.toLowerCase()}"></ul>
@@ -871,7 +918,7 @@
           <form class="time-edit">
             <label>Hora <select name="hours" required><option value="">—</option>${scheduleHourOptions}</select></label>
             <label>Minutos <select name="minutes" required><option value="">—</option><option value="00">00</option><option value="30">30</option></select></label>
-            <button class="button" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i> Adicionar horário</button>
+            <button class="button module-button" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i> Adicionar horário</button>
           </form>`;
         const toggle = card.querySelector('input[type="checkbox"]');
         const form = card.querySelector('.time-edit');
@@ -887,7 +934,6 @@
         [hourField.value, minuteField.value] = selections[index] || ['', ''];
         form.addEventListener('change', () => hourField.setCustomValidity(''));
         mode.textContent = !schedule ? 'Indisponível' : toggle.checked ? 'Ativa' : 'Pausada';
-        card.querySelector('.schedule-timeline').hidden = !schedule;
         card.querySelector('.schedule-empty').hidden = !schedule || schedule.times.length > 0;
         card.querySelector('.schedule-count').textContent = schedule ?
           schedule.times.length + ' de ' + MAX_SCHEDULE_TIMES + ' horários' + (full ? ' · Limite atingido' : '') : 'Agenda ainda não recebida';
@@ -897,17 +943,17 @@
           this.lastRender = JSON.stringify([draft, locked]);
           this.render();
         });
+        const lanes = [];
         for (const slot of schedule?.times || []) {
-          const [hours, minutes] = slot.split(':').map(Number);
-          const mark = document.createElement('span');
-          mark.className = 'schedule-mark';
-          mark.style.setProperty('--slot-position', ((hours * 60 + minutes) / 1440 * 100) + '%');
-          mark.title = slot;
-          track.append(mark);
+          track.append(ScheduleTimeline.marker(slot, lanes));
           const item = document.createElement('li');
+          item.dataset.slot = slot;
           const slotTime = document.createElement('time');
           slotTime.dateTime = slot;
           slotTime.textContent = slot;
+          const nextLabel = document.createElement('span');
+          nextLabel.className = 'slot-next';
+          nextLabel.textContent = 'Próximo';
           const remove = document.createElement('button');
           remove.type = 'button';
           remove.className = 'icon-button';
@@ -919,7 +965,7 @@
             this.render();
             container.querySelectorAll('input[type="checkbox"]')[index].focus();
           });
-          item.append(slotTime, remove);
+          item.append(slotTime, nextLabel, remove);
           list.append(item);
         }
         form.addEventListener('submit', (event) => {
@@ -939,6 +985,80 @@
           (field.disabled ? container.querySelectorAll('input[type="checkbox"]')[index] : field).focus();
         });
         container.append(card);
+      }
+      ScheduleTimeline.render();
+    }
+  };
+
+  // A linha do tempo usa a agenda exibida e o relógio local apenas para apresentação.
+  const ScheduleTimeline = {
+    timer: null,
+    setActive(active) {
+      if (active) {
+        this.render();
+        if (this.timer === null) this.timer = setInterval(() => this.render(), 15000);
+      } else {
+        clearInterval(this.timer);
+        this.timer = null;
+      }
+    },
+    minutes(time) {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    },
+    marker(slot, lanes) {
+      const position = this.minutes(slot) / 1440 * 100;
+      // Separa os círculos próximos mesmo quando a trilha fica estreita.
+      const available = lanes.findIndex((previous) => position - previous >= 15);
+      const lane = available < 0 ? lanes.length : available;
+      lanes[lane] = position;
+      const marker = document.createElement('span');
+      marker.className = 'schedule-mark';
+      marker.dataset.slot = slot;
+      marker.dataset.lane = String(lane);
+      marker.style.setProperty('--slot-position', position + '%');
+      marker.title = slot;
+      return marker;
+    },
+    render() {
+      if (!AppState.signedIn || AppState.view !== 'schedules') return;
+      const { draft, scheduleStale } = AppState.equipment;
+      const now = new Date();
+      const localTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const currentMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+      const day = now.getHours() >= 6 && now.getHours() < 18;
+      const edited = ScheduleManager.dirty();
+      for (const card of $('schedule-panels').querySelectorAll('.schedule-panel')) {
+        const schedule = draft?.[card.dataset.module];
+        const timeline = card.querySelector('.schedule-timeline');
+        timeline.dataset.period = day ? 'day' : 'night';
+        timeline.style.setProperty('--now-position', (currentMinute / 1440 * 100) + '%');
+        timeline.querySelector('.schedule-period-label').textContent = day ? 'Dia' : 'Noite';
+        const clock = timeline.querySelector('.schedule-now-time');
+        clock.dateTime = localTime;
+        clock.textContent = localTime;
+
+        const slots = schedule?.enabled ? schedule.times : [];
+        const today = slots.find((slot) => this.minutes(slot) >= currentMinute);
+        const next = today ?? slots[0];
+        const tomorrow = Boolean(next && !today);
+        for (const slot of card.querySelectorAll('[data-slot]')) {
+          slot.toggleAttribute('data-next', slot.dataset.slot === next);
+        }
+        const summary = card.querySelector('.schedule-next');
+        summary.hidden = !next;
+        if (!next) continue;
+        summary.querySelector('.schedule-next-label').textContent = edited ? 'Próximo horário no rascunho' :
+          scheduleStale ? 'Próximo na última agenda recebida' : 'Próximo horário pela hora local';
+        summary.querySelector('.schedule-next-day').textContent = tomorrow ? 'Amanhã, às ' : '';
+        const nextTime = summary.querySelector('time');
+        nextTime.dateTime = next;
+        nextTime.textContent = next;
+        const remaining = Math.ceil(this.minutes(next) - currentMinute + (tomorrow ? 1440 : 0));
+        const hours = Math.floor(remaining / 60);
+        const minutes = remaining % 60;
+        const duration = [hours ? hours + ' h' : '', minutes ? minutes + ' min' : ''].filter(Boolean).join(' ');
+        summary.querySelector('.schedule-countdown').textContent = duration ? 'Em ' + duration : 'Neste minuto';
       }
     }
   };
@@ -978,18 +1098,25 @@
         form.noValidate = true;
         form.innerHTML = `
           <h2 class="panel-title"><span class="icon-box"><i class="fa-solid fa-seedling" aria-hidden="true"></i></span></h2>
+          <p class="settings-note"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>O firmware atual do Arduino aceita apenas o peso-alvo. O envio da configuração completa requer uma versão compatível.</p>
           <div class="config-fields"></div>
           <div class="config-actions">
-            <p class="status-line config-status neutral" role="status"></p>
-            <button class="button primary" type="submit">Salvar configuração</button>
-            <button class="button" type="submit" value="target-weight">Salvar peso-alvo</button>
+            <div class="save-status">
+              <p class="status-line config-status neutral" role="status"></p>
+              <p id="config-feedback" class="status-line" hidden></p>
+            </div>
+            <button class="button primary config-full-save" type="submit">Salvar configuração</button>
+            <button class="button accent" type="submit" value="target-weight"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>Salvar peso-alvo</button>
           </div>`;
         form.querySelector('h2').append(MODULES[module].label);
         for (const group of CONFIG_GROUPS[module]) {
           const fieldset = document.createElement('fieldset');
           fieldset.className = 'config-group';
           const legend = document.createElement('legend');
-          legend.textContent = group.title;
+          legend.append(makeIcon(group.icon), group.title);
+          const hint = document.createElement('p');
+          hint.className = 'config-group-hint';
+          hint.textContent = group.hint;
           const grid = document.createElement('div');
           grid.className = 'field-grid';
           for (const [key, caption, initial, type, scale = 1] of group.fields) {
@@ -1015,7 +1142,7 @@
             field.append(label, input, error);
             grid.append(field);
           }
-          fieldset.append(legend, grid);
+          fieldset.append(legend, hint, grid);
           form.querySelector('.config-fields').append(fieldset);
         }
         form.addEventListener('input', () => {
@@ -1071,9 +1198,11 @@
           error.hidden = !errorMessage;
         }
         const status = form.querySelector('.config-status');
-        const message = hasErrors ? [errors.schema || 'Revise os campos destacados.', 'danger'] :
-          pending ? [UIController.phase(pending), 'info'] : same ? ['Configuração confirmada pelo equipamento.', 'success'] :
-          sameTarget ? ['Peso-alvo confirmado pelo equipamento. Há outros campos a confirmar.', 'success'] :
+        const source = diagnostics.active?.() ? 'simulador' : 'equipamento';
+        const message = pending ? [UIController.phase(pending), 'info'] :
+          same ? ['Configuração confirmada pelo ' + source + '.', 'success'] :
+          sameTarget ? ['Peso-alvo confirmado pelo ' + source + '. Há outros campos a confirmar.', 'success'] :
+          hasErrors ? [errors.schema || 'Revise os campos destacados.', 'danger'] :
           confirmed ? ['Alterações ainda não confirmadas.', 'warning'] :
           ['Valores de referência. O protocolo não consulta a configuração atual do Arduino.', 'neutral'];
         UIController.setStatus(status, ...message);
@@ -1093,13 +1222,14 @@
     error: ['Falha', 'danger', 'circle-exclamation'],
     idle: ['Em espera', 'neutral', 'circle-pause'],
     checking: ['Verificando sensores', 'warning', 'magnifying-glass'],
-    running: ['Em operação física', 'warning', 'hourglass-half'],
+    running: ['Em operação física', 'progress', 'circle-play'],
     completed: ['Ciclo concluído', 'success', 'circle-check'],
     available: ['RTC sincronizado', 'success', 'clock'],
     invalid: ['Horário não validado · sincronize o RTC', 'warning', 'clock'],
     failure: ['Falha no módulo RTC', 'danger', 'circle-exclamation']
   };
   const UIController = {
+    feedbackEquipment: null,
     phase(command) {
       return command?.state === 'waiting_ack' ? 'Aguardando ACK (máx 5s)…' : 'Executando no Arduino (máx 15s)…';
     },
@@ -1114,6 +1244,7 @@
         const page = $('view-' + button.dataset.view);
         if (page) page.hidden = !active;
       }
+      ScheduleTimeline.setActive(AppState.signedIn && view === 'schedules');
       if (AppState.signedIn && !$('dashboard-app').hidden) {
         $(view + '-title').focus({ preventScroll: true });
         window.scrollTo(0, 0);
@@ -1126,6 +1257,15 @@
       element.classList.remove(...Object.keys(STATUS_ICONS));
       element.classList.add(tone);
       element.replaceChildren(makeIcon(icon, ' status-icon'), text);
+    },
+    commandFeedback(action, text = '', tone = 'danger') {
+      const id = scheduleActions.includes(action) ? 'schedule-feedback' :
+        action === 'set_feeding_config' ? 'config-feedback' : null;
+      if (!id) return;
+      const feedback = $(id);
+      if (!feedback) return;
+      if (text) this.setStatus(feedback, text, tone);
+      feedback.hidden = !text;
     },
     mountReservoirs() {
       for (const [key, name, icon] of [['food', 'Reservatório de ração', 'box-archive'], ['water', 'Reservatório de água', 'water']]) {
@@ -1207,9 +1347,17 @@
       $('dashboard-app').hidden = !AppState.signedIn;
       $('connect').disabled = AppState.connection === 'connecting';
       $('connect-label').textContent = AppState.connection === 'connecting' ? 'Conectando ao EMQX…' : 'Conectar à gaiola';
-      if (!AppState.signedIn) return;
+      if (!AppState.signedIn) {
+        ScheduleTimeline.setActive(false);
+        return;
+      }
       const simulated = Boolean(diagnostics.active?.());
       const { equipment, connection, settings, history } = AppState;
+      if (this.feedbackEquipment !== equipment) {
+        this.feedbackEquipment = equipment;
+        this.commandFeedback('get_schedule');
+        this.commandFeedback('set_feeding_config');
+      }
       const unread = history.filter((entry) => entry.unread).length;
       const connectionLabel = {
         online: ['Conectado ao EMQX', 'success', 'link'],
@@ -1269,14 +1417,16 @@
         const running = AppState.equipment.status[module] === 'running';
         const button = $(info.button);
         button.disabled = !command_service.canActuate(info.action);
-        this.buttonText(button, pending ? this.phase(pending) : running ? 'Em operação física…' : info.caption, pending || running);
+        const activity = pending?.state === 'waiting_ack' ? 'waiting' : pending || running ? 'running' : '';
+        this.buttonText(button, pending ? this.phase(pending) : running ? 'Em operação física…' : info.caption, activity);
       }
       for (const [id, action, label] of [
         ['sync', 'sync_time', 'Sincronizar relógio (RTC)'], ['cleaning', 'ack_cleaning', 'Confirmar limpeza realizada']
       ]) {
         const pending = command_service.pending(action);
         $(id).disabled = !available || Boolean(pending);
-        this.buttonText($(id), pending ? this.phase(pending) : label, pending);
+        const activity = pending ? (pending.state === 'waiting_ack' ? 'waiting' : 'running') : '';
+        this.buttonText($(id), pending ? this.phase(pending) : label, activity);
       }
       $('refresh').disabled = !available || Boolean(command_service.pending('get_status') || command_service.pending('get_telemetry'));
       const dialog = $('action-dialog');
@@ -1286,10 +1436,12 @@
         $('action-confirm').disabled = !action || !command_service.canActuate(action);
       }
     },
-    buttonText(button, text, busy) {
-      if (button.textContent === text && Boolean(button.querySelector('i')) === Boolean(busy)) return;
+    buttonText(button, text, activity) {
+      if (button.textContent === text && button.dataset.activity === activity) return;
+      button.dataset.activity = activity;
       button.textContent = text;
-      if (busy) button.prepend(makeIcon('hourglass-half'));
+      const icon = { waiting: 'hourglass-half', running: 'circle-play' }[activity] || button.dataset.icon;
+      if (icon) button.prepend(makeIcon(icon));
     },
     refresh() {
       if (!command_service.available()) return false;
