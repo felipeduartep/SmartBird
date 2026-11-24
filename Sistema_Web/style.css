@@ -962,7 +962,7 @@ details[open] .reading-chevron { rotate: 225deg; }
   max-height: calc(100dvh - env(safe-area-inset-top) - 1.5rem);
   display: grid;
   gap: .55rem;
-  overflow: auto;
+  overflow: hidden auto;
   pointer-events: none;
 }
 #dashboard-app:not([hidden]) ~ .toasts {
@@ -983,7 +983,18 @@ details[open] .reading-chevron { rotate: 225deg; }
   box-shadow: var(--shadow);
   font-size: .875rem;
   overflow-wrap: anywhere;
-  animation: enter var(--reveal) both;
+  opacity: 0;
+  transform: translateX(1.5rem);
+  transition: opacity 280ms ease-out, transform 340ms cubic-bezier(.2, .8, .28, 1);
+}
+.toast.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.toast[inert] {
+  pointer-events: none;
+  transform: translateX(2.5rem);
+  transition-timing-function: ease-in, ease-in-out;
 }
 .toast-title { display: flex; align-items: center; gap: .45rem; color: var(--status-ink); }
 .toast-title > .status-icon {

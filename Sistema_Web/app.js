@@ -109,19 +109,35 @@
       toast.innerHTML = '<div><strong class="toast-title"></strong><p></p></div><button class="icon-button" type="button" aria-label="Dispensar aviso"></button>';
       toast.querySelector('strong').append(makeIcon(STATUS_ICONS[tone], ' status-icon'), title);
       toast.querySelector('p').textContent = message;
+      let durationTimer;
+      const dismiss = () => {
+        if (!toast.isConnected || toast.inert) return;
+        clearTimeout(durationTimer);
+        toast.inert = true;
+        toast.classList.remove('is-visible');
+        const animations = toast.getAnimations?.() ?? [];
+        if (animations.length === 0) {
+          toast.remove();
+          return;
+        }
+        Promise.allSettled(animations.map((animation) => animation.finished)).then(() => toast.remove());
+      };
       const close = toast.querySelector('button');
       close.append(makeIcon('xmark'));
-      close.addEventListener('click', () => toast.remove());
+      close.addEventListener('click', dismiss);
       if (shortcut) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'button small';
         button.textContent = 'Consultar equipamento';
-        button.addEventListener('click', () => { if (shortcut()) toast.remove(); });
+        button.addEventListener('click', () => { if (shortcut()) dismiss(); });
         toast.firstElementChild.append(button);
       }
       $('toasts').prepend(toast);
-      if (tone === 'success' || tone === 'info') setTimeout(() => toast.remove(), 5000);
+      // Registra o estado inicial antes de iniciar a transição.
+      toast.getBoundingClientRect();
+      toast.classList.add('is-visible');
+      if (tone === 'success' || tone === 'info') durationTimer = setTimeout(dismiss, 5000);
     }
   };
 
