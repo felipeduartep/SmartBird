@@ -113,6 +113,11 @@ struct ConfiguracaoSistema {
 struct DadosSistema {
     EstadoSistema estado = EstadoSistema::INICIALIZANDO;
 
+    // Estado de conectividade informado pelo ESP8266.
+    bool conectividadeRecebida = false;
+    bool wifiConectado = false;
+    bool mqttConectado = false;
+
     Reservatorio reservatorioAlimento;
     Reservatorio reservatorioAgua;
 

@@ -16,7 +16,7 @@
 namespace {
 
 // =====================================================
-// CONVERSÃO DE ESTADOS
+// CONVERSÃƒO DE ESTADOS
 // =====================================================
 
 const char* estadoSistemaTexto(EstadoSistema e) {
@@ -136,7 +136,7 @@ void enviarResponseDados(const char* id, JsonDocument& dados) {
 }
 
 // =====================================================
-// RESERVATÓRIOS
+// RESERVATÃ“RIOS
 // =====================================================
 
 void adicionarReservatorio(JsonObject destino, const Reservatorio& reservatorio) {
@@ -158,7 +158,7 @@ void adicionarRecipientes(JsonObject destino, const DadosSistema& dados) {
     alimento["weight_g"] = dados.alimentacao.pesoAtualGramas;
     alimento["valid"] = dados.alimentacao.leituraValida;
 
-    // Recipiente de água
+    // Recipiente de Ã¡gua
     JsonObject agua = destino["water_bowl"].to<JsonObject>();
 
     agua["level_state"] =
@@ -225,7 +225,7 @@ void responderStatus(const char* id, const DadosSistema& dados) {
     data["watering"] =
         estadoHidratacaoTexto(dados.hidratacao.estado);
 
-    // Reservatórios de origem
+    // ReservatÃ³rios de origem
     JsonObject reservatorios = data["reservoirs"].to<JsonObject>();
 
     adicionarReservatorio(
@@ -238,7 +238,7 @@ void responderStatus(const char* id, const DadosSistema& dados) {
         dados.reservatorioAgua
     );
 
-    // Recipientes acessíveis à ave
+    // Recipientes acessÃ­veis Ã  ave
     adicionarRecipientes(
         data["containers"].to<JsonObject>(),
         dados
@@ -271,7 +271,7 @@ void responderTelemetria(const char* id, const DadosSistema& dados) {
 
     JsonObject data = resposta["data"].to<JsonObject>();
 
-    // Reservatórios de origem
+    // ReservatÃ³rios de origem
     JsonObject reservatorios = data["reservoirs"].to<JsonObject>();
 
     adicionarReservatorio(
@@ -290,7 +290,7 @@ void responderTelemetria(const char* id, const DadosSistema& dados) {
         dados
     );
 
-    // Alimentação
+    // AlimentaÃ§Ã£o
     JsonObject alimentacao = data["feeding"].to<JsonObject>();
 
     alimentacao["state"] =
@@ -305,7 +305,7 @@ void responderTelemetria(const char* id, const DadosSistema& dados) {
     alimentacao["gate_open"] =
         dados.alimentacao.comportaAberta;
 
-    // Hidratação
+    // HidrataÃ§Ã£o
     JsonObject hidratacao = data["watering"].to<JsonObject>();
 
     hidratacao["state"] =
@@ -317,7 +317,7 @@ void responderTelemetria(const char* id, const DadosSistema& dados) {
     hidratacao["bowl_level"] =
         estadoRecipienteAguaTexto(dados.hidratacao.estadoRecipiente);
 
-    // Manutenção
+    // ManutenÃ§Ã£o
     JsonObject manutencao = data["maintenance"].to<JsonObject>();
 
     manutencao["cleaning_due"] =
@@ -359,7 +359,7 @@ void responderAgenda(const char* id, const DadosSistema& dados) {
 }
 
 // =====================================================
-// RESPOSTA: INFORMAÇÕES DO SISTEMA
+// RESPOSTA: INFORMAÃ‡Ã•ES DO SISTEMA
 // =====================================================
 
 void responderInfo(const char* id) {
@@ -383,7 +383,7 @@ void responderInfo(const char* id) {
 }
 
 // =====================================================
-// VALIDAÇÃO DE HORÁRIOS
+// VALIDAÃ‡ÃƒO DE HORÃRIOS
 // =====================================================
 
 bool parseHorario(const char* texto, uint8_t& hora, uint8_t& minuto) {
@@ -472,7 +472,7 @@ bool preencherAgenda(
 }
 
 // =====================================================
-// VALIDAÇÃO DE DATA
+// VALIDAÃ‡ÃƒO DE DATA
 // =====================================================
 
 bool anoBissexto(int ano) {
@@ -498,12 +498,12 @@ uint8_t diasNoMes(int ano, uint8_t mes) {
 }
 
 // =====================================================
-// CONVERSÃO DE DATA/HORA
+// CONVERSÃƒO DE DATA/HORA
 // =====================================================
 
-// Recebe YYYY-MM-DDTHH:MM:SS±HH:MM. Os componentes de data/hora
-// representam o horário de parede local enviado pela Web; o offset é
-// validado como metadado e não é convertido para UTC no RTC local.
+// Recebe YYYY-MM-DDTHH:MM:SSÂ±HH:MM. Os componentes de data/hora
+// representam o horÃ¡rio de parede local enviado pela Web; o offset Ã©
+// validado como metadado e nÃ£o Ã© convertido para UTC no RTC local.
 
 bool parseDateTimeLocal(const char* texto, DateTime& dataHora) {
 
@@ -658,6 +658,21 @@ void processarMensagem(
         return;
     }
 
+    // Mensagem interna do ESP8266: atualiza conectividade sem gerar resposta.
+    if (strcmp(tipo, "connectivity") == 0) {
+        if (!requisicao["wifi"].is<bool>() ||
+            !requisicao["mqtt"].is<bool>()) {
+            Serial.println(F("[PROTOCOLO] Status de conectividade invalido."));
+            return;
+        }
+
+        dados.conectividadeRecebida = true;
+        dados.wifiConectado = requisicao["wifi"].as<bool>();
+        dados.mqttConectado = dados.wifiConectado &&
+                              requisicao["mqtt"].as<bool>();
+        return;
+    }
+
     if (
         strcmp(tipo, "command") != 0 ||
         !*id ||
@@ -713,7 +728,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // ALIMENTAÇÃO MANUAL
+    // ALIMENTAÃ‡ÃƒO MANUAL
     // =================================================
 
     if (strcmp(acao, "feed_manual") == 0) {
@@ -737,7 +752,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // HIDRATAÇÃO MANUAL
+    // HIDRATAÃ‡ÃƒO MANUAL
     // =================================================
 
     if (strcmp(acao, "water_manual") == 0) {
@@ -761,7 +776,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // CONFIRMAÇÃO DE LIMPEZA
+    // CONFIRMAÃ‡ÃƒO DE LIMPEZA
     // =================================================
 
     if (strcmp(acao, "ack_cleaning") == 0) {
@@ -785,7 +800,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // ATUALIZAÇÃO DE AGENDAMENTOS
+    // ATUALIZAÃ‡ÃƒO DE AGENDAMENTOS
     // =================================================
 
     if (strcmp(acao, "set_schedule") == 0) {
@@ -836,7 +851,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // REMOÇÃO DE AGENDAMENTO
+    // REMOÃ‡ÃƒO DE AGENDAMENTO
     // =================================================
 
     if (strcmp(acao, "remove_schedule") == 0) {
@@ -911,7 +926,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // CONFIGURAÇÃO DE ALIMENTAÇÃO
+    // CONFIGURAÃ‡ÃƒO DE ALIMENTAÃ‡ÃƒO
     // =================================================
 
     if (strcmp(acao, "set_feeding_config") == 0) {
@@ -955,7 +970,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // CONFIGURAÇÃO DE HIDRATAÇÃO
+    // CONFIGURAÃ‡ÃƒO DE HIDRATAÃ‡ÃƒO
     // =================================================
 
     if (strcmp(acao, "set_watering_config") == 0) {
@@ -970,7 +985,7 @@ void processarMensagem(
     }
 
     // =================================================
-    // SINCRONIZAÇÃO DO RTC
+    // SINCRONIZAÃ‡ÃƒO DO RTC
     // =================================================
 
     if (strcmp(acao, "sync_time") == 0) {

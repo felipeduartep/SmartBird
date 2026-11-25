@@ -98,6 +98,13 @@ unsigned long ultimaFalhaPublicacao = 0;
 
 bool primeiraTentativaMQTT = true;
 
+// Estado de conectividade enviado ao Mega pela UART.
+const unsigned long INTERVALO_STATUS_CONECTIVIDADE = 5000;
+unsigned long ultimoStatusConectividade = 0;
+bool statusConectividadeInicializado = false;
+bool ultimoEstadoWiFi = false;
+bool ultimoEstadoMQTT = false;
+
 // =============================================================
 // 6. VERIFICACAO BASICA DO JSON
 // =============================================================
@@ -412,7 +419,46 @@ void callback(char* topic, byte* payload,
 }
 
 // =============================================================
-// 13. INICIALIZAR WI-FI
+// 13. ENVIAR ESTADO WI-FI/MQTT AO ARDUINO MEGA
+// =============================================================
+
+void enviarEstadoConectividade() {
+
+  bool wifiConectado = (WiFi.status() == WL_CONNECTED);
+  bool mqttConectado = wifiConectado && client.connected();
+
+  bool houveMudanca = !statusConectividadeInicializado ||
+                      wifiConectado != ultimoEstadoWiFi ||
+                      mqttConectado != ultimoEstadoMQTT;
+
+  bool chegouHoraAtualizar =
+      millis() - ultimoStatusConectividade >=
+      INTERVALO_STATUS_CONECTIVIDADE;
+
+  if (!houveMudanca && !chegouHoraAtualizar) return;
+
+  char mensagem[80];
+  int tamanho = snprintf(
+      mensagem,
+      sizeof(mensagem),
+      "{\"v\":\"1.0\",\"type\":\"connectivity\",\"wifi\":%s,\"mqtt\":%s}",
+      wifiConectado ? "true" : "false",
+      mqttConectado ? "true" : "false"
+  );
+
+  if (tamanho <= 0 || tamanho >= (int)sizeof(mensagem)) return;
+
+  portaMega.write((const uint8_t*)mensagem, (size_t)tamanho);
+  portaMega.write((uint8_t)'\n');
+
+  ultimoEstadoWiFi = wifiConectado;
+  ultimoEstadoMQTT = mqttConectado;
+  ultimoStatusConectividade = millis();
+  statusConectividadeInicializado = true;
+}
+
+// =============================================================
+// 14. INICIALIZAR WI-FI
 // =============================================================
 
 void setup_wifi() {
@@ -426,7 +472,7 @@ void setup_wifi() {
 }
 
 // =============================================================
-// 14. GERENCIAR WI-FI
+// 15. GERENCIAR WI-FI
 // =============================================================
 
 void gerenciarWiFi() {
@@ -447,7 +493,7 @@ void gerenciarWiFi() {
 }
 
 // =============================================================
-// 15. RECONEXAO MQTT
+// 16. RECONEXAO MQTT
 // =============================================================
 
 void reconnect() {
@@ -492,7 +538,7 @@ void reconnect() {
 }
 
 // =============================================================
-// 16. MOSTRAR AVISOS EVENTUAIS
+// 17. MOSTRAR AVISOS EVENTUAIS
 // =============================================================
 
 void mostrarAvisos() {
@@ -505,7 +551,7 @@ void mostrarAvisos() {
 }
 
 // =============================================================
-// 17. SETUP
+// 18. SETUP
 // =============================================================
 
 void setup() {
@@ -551,7 +597,7 @@ void setup() {
 }
 
 // =============================================================
-// 18. LOOP PRINCIPAL
+// 19. LOOP PRINCIPAL
 // =============================================================
 
 void loop() {
@@ -582,7 +628,10 @@ void loop() {
   // 8. Reconectar MQTT quando necessario
   reconnect();
 
-  // 9. Mostrar apenas avisos eventuais
+  // 9. Informar ao Mega os estados atuais de Wi-Fi e MQTT
+  enviarEstadoConectividade();
+
+  // 10. Mostrar apenas avisos eventuais
   mostrarAvisos();
 
   yield();
@@ -591,4 +640,3 @@ void loop() {
 // =============================================================
 // FIM - SMARTBIRD ESP8266 V2.4
 // =============================================================
-
