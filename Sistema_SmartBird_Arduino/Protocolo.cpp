@@ -11,6 +11,7 @@
 #include "Alimentacao.h"
 #include "Hidratacao.h"
 #include "Manutencao.h"
+#include "Persistencia.h"
 
 namespace {
 
@@ -811,8 +812,17 @@ void processarMensagem(
             return;
         }
 
+        const AgendaDiaria agendaAlimentacaoAnterior = dados.agendaAlimentacao;
+        const AgendaDiaria agendaHidratacaoAnterior = dados.agendaHidratacao;
         dados.agendaAlimentacao = novaAgendaAlimentacao;
         dados.agendaHidratacao = novaAgendaHidratacao;
+
+        if (!salvarDadosPersistidos(dados)) {
+            dados.agendaAlimentacao = agendaAlimentacaoAnterior;
+            dados.agendaHidratacao = agendaHidratacaoAnterior;
+            enviarAck(id, "rejected");
+            return;
+        }
 
         enviarAck(id, "accepted");
 
@@ -857,6 +867,7 @@ void processarMensagem(
             return;
         }
 
+        const AgendaDiaria agendaAnterior = *agenda;
         int indice = -1;
 
         for (uint8_t i = 0; i < MAX_HORARIOS_DIARIOS; i++) {
@@ -876,6 +887,12 @@ void processarMensagem(
             !removerHorario(*agenda, (uint8_t)indice)
         ) {
 
+            enviarAck(id, "rejected");
+            return;
+        }
+
+        if (!salvarDadosPersistidos(dados)) {
+            *agenda = agendaAnterior;
             enviarAck(id, "rejected");
             return;
         }
@@ -918,8 +935,15 @@ void processarMensagem(
             return;
         }
 
+        const ConfiguracaoAlimentacao configuracaoAnterior = dados.configuracaoAlimentacao;
         dados.configuracaoAlimentacao.pesoAlvoGramas = pesoAlvo;
         dados.configuracaoAlimentacao.tempoMaximoMs = tempoMaximo;
+
+        if (!salvarDadosPersistidos(dados)) {
+            dados.configuracaoAlimentacao = configuracaoAnterior;
+            enviarAck(id, "rejected");
+            return;
+        }
 
         enviarAck(id, "accepted");
         JsonDocument resposta;

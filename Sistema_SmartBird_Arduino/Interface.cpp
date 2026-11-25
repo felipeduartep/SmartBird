@@ -11,6 +11,7 @@
 #include "Manutencao.h"
 #include "Alimentacao.h"
 #include "Hidratacao.h"
+#include "Persistencia.h"
 
 namespace {
 // Endereco comum de LCD I2C. Ajustar para 0x3F se o modulo usar esse endereco.
@@ -284,7 +285,12 @@ void iniciarEdicao(DadosSistema& d) {
 void confirmarEdicao(DadosSistema& d) {
     AgendaDiaria& agenda = agendaSelecionada(d);
     // definirHorario valida duplicidade e bloqueia horarios com pendencia.
+    const AgendaDiaria agendaAnterior = agenda;
     bool ok = definirHorario(agenda, indiceHorario, horaEditada, minutoEditado);
+    if (ok && !salvarDadosPersistidos(d)) {
+        agenda = agendaAnterior;
+        ok = false;
+    }
     if (ok) { bip(2400, 2); mostrarMensagem("Horario salvo", "Com sucesso"); }
     else { bip(500, 2); mostrarMensagem("Nao foi possivel", "Horario ocupado/dup."); }
 }

@@ -54,6 +54,7 @@ struct AgendaDiaria {
 
 struct ConfiguracaoAlimentacao {
     float pesoAlvoGramas = 0.0f;
+    float fatorCalibracao = -1032.96f;
     uint32_t tempoMaximoMs = 15000UL;
 };
 
