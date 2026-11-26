@@ -19,7 +19,7 @@ void inicializarComunicacao() {
     // Não chamar Serial.begin() novamente aqui.
 #else
     // UART dedicada ao ESP8266.
-    Serial1.begin(4800);
+    Serial1.begin(9600);
 #endif
 
     indiceRecepcao = 0;
