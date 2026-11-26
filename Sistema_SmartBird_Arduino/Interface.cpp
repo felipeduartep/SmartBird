@@ -11,6 +11,7 @@
 #include "Manutencao.h"
 #include "Alimentacao.h"
 #include "Hidratacao.h"
+#include "Persistencia.h"
 
 namespace {
 // Endereco comum de LCD I2C. Ajustar para 0x3F se o modulo usar esse endereco.
@@ -230,10 +231,15 @@ void desenharManutencao(const DadosSistema& d) {
     escreverLinha(1, mensagemLinha2);
 }
 
-void desenharConectividade() {
-    // O firmware atual ainda nao recebe estados Wi-Fi/MQTT do ESP8266.
-    escreverLinha(0, "WiFi: --");
-    escreverLinha(1, "MQTT: --");
+void desenharConectividade(const DadosSistema& d) {
+    if (!d.conectividadeRecebida) {
+        escreverLinha(0, "WiFi: Aguardando");
+        escreverLinha(1, "MQTT: Aguardando");
+        return;
+    }
+
+    escreverLinha(0, d.wifiConectado ? "WiFi: Conectado" : "WiFi: Offline");
+    escreverLinha(1, d.mqttConectado ? "MQTT: Conectado" : "MQTT: Offline");
 }
 
 void desenharMenu(DadosSistema& d) {
@@ -284,7 +290,12 @@ void iniciarEdicao(DadosSistema& d) {
 void confirmarEdicao(DadosSistema& d) {
     AgendaDiaria& agenda = agendaSelecionada(d);
     // definirHorario valida duplicidade e bloqueia horarios com pendencia.
+    const AgendaDiaria agendaAnterior = agenda;
     bool ok = definirHorario(agenda, indiceHorario, horaEditada, minutoEditado);
+    if (ok && !salvarDadosPersistidos(d)) {
+        agenda = agendaAnterior;
+        ok = false;
+    }
     if (ok) { bip(2400, 2); mostrarMensagem("Horario salvo", "Com sucesso"); }
     else { bip(500, 2); mostrarMensagem("Nao foi possivel", "Horario ocupado/dup."); }
 }
@@ -347,7 +358,7 @@ void desenharTela(DadosSistema& d) {
         case Tela::POTINHOS: desenharPotinhos(d); break;
         case Tela::PROXIMA_ACAO: desenharProximaAcao(d); break;
         case Tela::MANUTENCAO: desenharManutencao(d); break;
-        case Tela::CONECTIVIDADE: desenharConectividade(); break;
+        case Tela::CONECTIVIDADE: desenharConectividade(d); break;
     }
 }
 }

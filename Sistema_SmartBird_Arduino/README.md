@@ -99,3 +99,13 @@ Para `Serial1` no Mega:
 8. Só depois teste comandos remotos via ESP8266.
 
 **Atenção:** não deixe bomba, servo ou alimentação mecânica operando sem supervisão durante os primeiros testes.
+
+## Persistencia de configuracoes (EEPROM)
+
+O modulo `Persistencia.cpp/.h` utiliza a EEPROM interna do Arduino Mega 2560 para guardar configuracoes e agendas. A implementacao reserva dois slots alternados, cada um com identificador, versao, sequencia e CRC32. A gravacao invalida o slot de destino, grava o conteudo e escreve o identificador por ultimo; ao iniciar, o firmware seleciona o registro valido mais recente.
+
+Sao persistidos: peso-alvo, fator de calibracao da balanca, tempos maximos de alimentacao e bombeamento, referencias de cheio/vazio e nivel minimo dos reservatorios, intervalo de limpeza, data da ultima limpeza e horarios ativos das agendas. Registros de execucao, pendencias, leituras de sensores e estados de atuadores nao sao restaurados.
+
+As alteracoes feitas por `set_schedule`, `remove_schedule`, `set_feeding_config`, pela edicao local de horarios, pela calibracao da balanca e pela confirmacao de limpeza solicitam gravacao. Se a gravacao falhar, a alteracao e revertida e o comando nao e confirmado como aceito.
+
+Na primeira inicializacao sem registro valido, o firmware mantem os valores padrao definidos em RAM. O primeiro salvamento de uma configuracao grava o primeiro registro valido. O layout atual usa a versao 1; qualquer mudanca futura na estrutura persistida deve incrementar `VERSAO_EEPROM`.

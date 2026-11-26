@@ -1,5 +1,6 @@
 #include "Manutencao.h"
 #include "Tempo.h"
+#include "Persistencia.h"
 
 // ==========================================
 // CONFIGURAÇÕES INTERNAS
@@ -114,11 +115,23 @@ bool confirmarLimpeza(DadosSistema& dados) {
         return false;
     }
 
-    dados.manutencao.ultimaLimpezaEpoch = agora.unixtime();
+    const uint32_t ultimaAnterior = dados.manutencao.ultimaLimpezaEpoch;
+    const bool registradaAnterior = dados.manutencao.limpezaRegistrada;
+    const bool pendenteAnterior = dados.manutencao.limpezaPendente;
+    const bool alertaAnterior = dados.manutencao.alertaAtivo;
 
+    dados.manutencao.ultimaLimpezaEpoch = agora.unixtime();
     dados.manutencao.limpezaRegistrada = true;
     dados.manutencao.limpezaPendente = false;
     dados.manutencao.alertaAtivo = false;
+
+    if (!salvarDadosPersistidos(dados)) {
+        dados.manutencao.ultimaLimpezaEpoch = ultimaAnterior;
+        dados.manutencao.limpezaRegistrada = registradaAnterior;
+        dados.manutencao.limpezaPendente = pendenteAnterior;
+        dados.manutencao.alertaAtivo = alertaAnterior;
+        return false;
+    }
 
     return true;
 }

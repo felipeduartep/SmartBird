@@ -54,6 +54,7 @@ struct AgendaDiaria {
 
 struct ConfiguracaoAlimentacao {
     float pesoAlvoGramas = 0.0f;
+    float fatorCalibracao = -1032.96f;
     uint32_t tempoMaximoMs = 15000UL;
 };
 
@@ -111,6 +112,11 @@ struct ConfiguracaoSistema {
 
 struct DadosSistema {
     EstadoSistema estado = EstadoSistema::INICIALIZANDO;
+
+    // Estado de conectividade informado pelo ESP8266.
+    bool conectividadeRecebida = false;
+    bool wifiConectado = false;
+    bool mqttConectado = false;
 
     Reservatorio reservatorioAlimento;
     Reservatorio reservatorioAgua;

@@ -4,12 +4,12 @@
 
 #include "Alimentacao.h"
 #include "Hardware_SB.h"
+#include "Persistencia.h"
 
 namespace {
 HX711 balanca;
 Servo servoComporta;
 
-constexpr float FATOR_CALIBRACAO_PADRAO = -1032.96f;
 constexpr uint8_t ANGULO_FECHADO = 0;
 constexpr uint8_t ANGULO_ABERTO = 90;
 constexpr unsigned long INTERVALO_LEITURA_MS = 250UL;
@@ -27,12 +27,12 @@ void fecharComporta(DadosSistema* dados = nullptr) {
 }
 }
 
-bool inicializarAlimentacao() {
+bool inicializarAlimentacao(const ConfiguracaoAlimentacao& configuracao) {
     servoComporta.attach(SERVO_COMPORTA);
     servoComporta.write(ANGULO_FECHADO);
 
     balanca.begin(HX711_DT_ALIMENTO, HX711_SCK_ALIMENTO);
-    balanca.set_scale(FATOR_CALIBRACAO_PADRAO);
+    balanca.set_scale(configuracao.fatorCalibracao);
 
     const unsigned long inicio = millis();
     while (!balanca.is_ready()) {
@@ -143,7 +143,7 @@ bool zerarBalanca() {
     return true;
 }
 
-bool calibrarBalanca(float pesoConhecidoGramas) {
+bool calibrarBalanca(float pesoConhecidoGramas, DadosSistema& dados) {
     if (alimentacaoEmAndamento || !balancaDisponivel ||
         !isfinite(pesoConhecidoGramas) || pesoConhecidoGramas <= 0.0f ||
         !balanca.is_ready())
@@ -154,7 +154,14 @@ bool calibrarBalanca(float pesoConhecidoGramas) {
     const float novoFator = leituraBruta / pesoConhecidoGramas;
     if (!isfinite(novoFator) || fabs(novoFator) < 0.001f) return false;
 
+    const float fatorAnterior = dados.configuracaoAlimentacao.fatorCalibracao;
     balanca.set_scale(novoFator);
+    dados.configuracaoAlimentacao.fatorCalibracao = novoFator;
+    if (!salvarDadosPersistidos(dados)) {
+        dados.configuracaoAlimentacao.fatorCalibracao = fatorAnterior;
+        balanca.set_scale(fatorAnterior);
+        return false;
+    }
     balancaCalibrada = true;
     return true;
 }

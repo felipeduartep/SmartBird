@@ -9,6 +9,7 @@
 #include "Comunicacao.h"
 #include "Protocolo.h"
 #include "Interface.h"
+#include "Persistencia.h"
 
 static DadosSistema dados;
 static bool controleInicializado = false;
@@ -139,10 +140,16 @@ void inicializarControle() {
     dados.reservatorioAgua.configuracao.distanciaNivelVazioCm = 30.0f;
     dados.reservatorioAgua.configuracao.nivelMinimoPercentual = 20.0f;
 
+    // Recupera configuracoes persistentes antes de inicializar os modulos.
+    const bool dadosRecuperados = carregarDadosPersistidos(dados);
+    Serial.println(dadosRecuperados
+        ? F("[EEPROM] Configuracoes recuperadas.")
+        : F("[EEPROM] Nenhum registro valido; usando padroes."));
+
     falhaInicializacao = false;
     inicializarReservatorios();
 
-    if (!inicializarAlimentacao()) falhaInicializacao = true;
+    if (!inicializarAlimentacao(dados.configuracaoAlimentacao)) falhaInicializacao = true;
     if (!inicializarHidratacao()) falhaInicializacao = true;
     if (!inicializarTempo()) {
         // RTC indisponível gera alerta, não impede funções locais manuais.
