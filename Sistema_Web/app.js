@@ -2,6 +2,7 @@
   'use strict';
 
   const CONFIG_TIMEOUTS = { ACK_TIMEOUT_MS: 5000, RESPONSE_TIMEOUT_MS: 15000 };
+  const QUEUE_CANCELLED_NOTICE = ' Os comandos que aguardavam na fila foram cancelados.';
   const CONFIG_DEFAULTS = {
     host: 'x1901c96.ala.eu-central-1.emqxsl.com', port: 8084, path: '/mqtt', deviceId: 'gaiola01'
   };
@@ -86,7 +87,7 @@
     signedIn: false, connection: 'offline', settings: null,
     equipment: equipmentState(), history: [], view: 'dashboard'
   };
-  const pendingCommands = new Map();
+  const pendingCommands = new Map(); // A ordem de inserção preserva a fila de envio.
   const diagnostics = {};
   const scheduleActions = ['get_schedule', 'set_schedule', 'remove_schedule'];
   const STATUS_ICONS = {
@@ -183,7 +184,7 @@
       return day + 'T' + clock + (offset >= 0 ? '+' : '-') + pad(offset / 60) + ':' + pad(offset % 60);
     },
     sync(quiet = false) {
-      return command_service.send('sync_time', { datetime: this.getLocalISOStringWithOffset() }, { quiet });
+      return command_service.send('sync_time', {}, { quiet, useCurrentTime: true });
     }
   };
 
@@ -319,6 +320,7 @@
 
   let commandCounter = BigInt(Date.now()) * 2n ** 32n + BigInt(crypto.getRandomValues(new Uint32Array(1))[0]);
   const command_service = {
+    activeCommand: null,
     available() {
       return AppState.signedIn && (Boolean(diagnostics.active?.()) ||
         (AppState.connection === 'online' && Boolean(mqtt_client.client?.isConnected())));
@@ -326,24 +328,34 @@
     pending(action) {
       return [...pendingCommands.values()].find((command) => command.action === action);
     },
-    canActuate(action) {
+    actuatorIdle(action) {
       const module = action === 'feed_manual' ? 'feeding' : 'watering';
-      return this.available() && !this.pending(action) && !['running', 'checking'].includes(AppState.equipment.status[module]);
+      return !['running', 'checking'].includes(AppState.equipment.status[module]);
     },
-    send(action, data = {}, { quiet = false } = {}) {
+    canActuate(action) {
+      return this.available() && !this.pending(action) && this.actuatorIdle(action);
+    },
+    validateActuation(action) {
+      if (action !== 'feed_manual' && action !== 'water_manual') return true;
+      if (!this.actuatorIdle(action)) {
+        response_handler.showError('Comando indisponível', { code: 'BUSY' });
+        return false;
+      }
+      const error = action === 'feed_manual' && feedingSafetyError(AppState.equipment);
+      if (!error) return true;
+      response_handler.showError('Alimentação bloqueada', error);
+      return false;
+    },
+    serialize(id, action, data) {
+      return JSON.stringify({ v: '1.0', type: 'command', id, source: 'web', action, data });
+    },
+    send(action, data = {}, { quiet = false, useCurrentTime = false } = {}) {
       if (this.pending(action)) return false;
       if (!this.available()) {
         ToastService.show('Equipamento indisponível', 'Aguarde a conexão com o broker antes de enviar um comando.', 'danger');
         return false;
       }
-      if (['feed_manual', 'water_manual'].includes(action) && !this.canActuate(action)) return false;
-      if (action === 'feed_manual') {
-        const error = feedingSafetyError(AppState.equipment);
-        if (error) {
-          response_handler.showError('Alimentação bloqueada', error);
-          return false;
-        }
-      }
+      if (!this.validateActuation(action)) return false;
       if (scheduleActions.includes(action) && scheduleActions.some((name) => this.pending(name))) {
         if (!quiet) ToastService.show('Agenda em atualização', 'Aguarde a confirmação do comando anterior.', 'warning');
         return false;
@@ -362,60 +374,83 @@
         data = schedule;
       }
       const id = (action === 'sync_time' ? 'sync-' : 'cmd-') + (++commandCounter).toString();
-      const payload = JSON.stringify({ v: '1.0', type: 'command', id, source: 'web', action, data });
+      const payload = this.serialize(id, action, data);
       if (new TextEncoder().encode(payload).length > MAX_PAYLOAD_BYTES) {
         ToastService.show('Comando muito grande', 'O pacote excede o limite de 1024 bytes.', 'danger');
         return false;
       }
       const command = {
-        id, action, data: JSON.parse(payload).data, quiet, state: 'waiting_ack',
-        timer: setTimeout(() => this.timeout(id), CONFIG_TIMEOUTS.ACK_TIMEOUT_MS)
+        id, action, data: JSON.parse(payload).data, payload, quiet, useCurrentTime, state: 'queued', timer: null
       };
       pendingCommands.set(id, command);
       UIController.commandFeedback(action);
-      try {
-        const simulated = Boolean(diagnostics.active?.());
-        diagnostics.log?.('TX', mqtt_client.topic('comandos'), payload, simulated ? 'Simulador' : 'MQTT');
-        if (simulated) diagnostics.send(command);
-        else mqtt_client.publish(payload);
-      } catch {
-        this.finish(command);
-        UIController.commandFeedback(action, 'Falha no envio da solicitação.');
-        ToastService.show('Falha no envio', 'O comando não pôde ser enviado. Consulte o status do equipamento.', 'danger');
-        return false;
-      }
+      const accepted = this.dispatchNext();
       UIController.render();
-      return true;
+      return accepted;
+    },
+    dispatchNext() {
+      if (this.activeCommand || !this.available()) return true;
+      for (const command of pendingCommands.values()) {
+        if (!this.validateActuation(command.action)) {
+          pendingCommands.delete(command.id);
+          continue;
+        }
+        if (command.useCurrentTime) {
+          command.data = { datetime: time_service.getLocalISOStringWithOffset() };
+          command.payload = this.serialize(command.id, command.action, command.data);
+        }
+        this.activeCommand = command;
+        command.state = 'waiting_ack';
+        command.timer = setTimeout(() => this.timeout(command.id), CONFIG_TIMEOUTS.ACK_TIMEOUT_MS);
+        try {
+          const simulated = Boolean(diagnostics.active?.());
+          diagnostics.log?.('TX', mqtt_client.topic('comandos'), command.payload, simulated ? 'Simulador' : 'MQTT');
+          if (simulated) diagnostics.send(command);
+          else mqtt_client.publish(command.payload);
+        } catch {
+          const notice = this.cancelAll() ? QUEUE_CANCELLED_NOTICE : '';
+          UIController.commandFeedback(command.action, 'Falha no envio da solicitação.');
+          ToastService.show('Falha no envio', 'O comando não pôde ser enviado. Consulte o status do equipamento.' + notice, 'danger');
+          return false;
+        }
+        return true;
+      }
+      return false;
     },
     finish(command) {
       clearTimeout(command.timer);
       pendingCommands.delete(command.id);
+      this.activeCommand = null;
+      this.dispatchNext();
       UIController.render();
     },
     timeout(id) {
-      const command = pendingCommands.get(id);
-      if (!command) return;
+      const command = this.activeCommand;
+      if (command?.id !== id) return;
       const awaitingAck = command.state === 'waiting_ack';
-      this.finish(command);
+      const notice = this.cancelAll() ? QUEUE_CANCELLED_NOTICE : '';
+      UIController.render();
       if (awaitingAck) {
         UIController.commandFeedback(command.action, 'O equipamento não respondeu à solicitação.');
-        ToastService.show('Sem resposta do equipamento', command.action + ' · Timeout de ACK. Verifique se o ESP8266/Arduino está online.', 'danger');
+        ToastService.show('Sem resposta do equipamento', command.action + ' · Timeout de ACK. Verifique se o ESP8266/Arduino está online.' + notice, 'danger');
       } else {
         UIController.commandFeedback(command.action, 'O resultado da solicitação continua sem confirmação.', 'warning');
-        ToastService.show('Resultado desconhecido', command.action + ' · Tempo de confirmação excedido. Consulte o status antes de tentar novamente.', 'warning', UIController.refresh);
+        ToastService.show('Resultado desconhecido', command.action + ' · Tempo de confirmação excedido. Consulte o status antes de tentar novamente.' + notice, 'warning', UIController.refresh);
       }
     },
     cancelAll(showNotice = false) {
-      if (showNotice && pendingCommands.size) {
-        ToastService.show('Conexão interrompida', 'Há comandos sem confirmação. Consulte o status antes de repetir uma operação.', 'warning', UIController.refresh);
-      }
-      for (const command of pendingCommands.values()) {
-        clearTimeout(command.timer);
-        if (showNotice) {
-          UIController.commandFeedback(command.action, 'Conexão interrompida. A última solicitação segue sem confirmação.', 'warning');
-        }
-      }
+      const command = this.activeCommand;
+      const hadQueued = pendingCommands.size > (command ? 1 : 0);
+      clearTimeout(command?.timer);
+      this.activeCommand = null;
       pendingCommands.clear();
+      if (showNotice && (command || hadQueued)) {
+        const detail = command ? 'O último comando segue sem confirmação. Consulte o status antes de repetir a operação.' : '';
+        const notice = hadQueued ? QUEUE_CANCELLED_NOTICE : '';
+        if (command) UIController.commandFeedback(command.action, 'Conexão interrompida. A última solicitação segue sem confirmação.', 'warning');
+        ToastService.show('Conexão interrompida', (detail + notice).trim(), 'warning', UIController.refresh);
+      }
+      return hadQueued;
     }
   };
 
@@ -435,8 +470,8 @@
       if (['ack', 'response', 'error'].includes(message.type)) this.resolve(message);
     },
     resolve(message) {
-      const command = pendingCommands.get(message.id);
-      if (!command) {
+      const command = command_service.activeCommand;
+      if (!command || message.id !== command.id) {
         if (message.type === 'error' && !message.id) {
           const text = this.errorText(message.error);
           const simulated = diagnostics.active?.() ? 'Simulador · ' : '';
@@ -445,25 +480,28 @@
         }
         return;
       }
-      if (message.type === 'ack' && command.state === 'waiting_ack') {
-        if (message.status === 'rejected') {
-          command_service.finish(command);
-          UIController.commandFeedback(command.action, 'A última solicitação foi recusada.');
-          this.showError('Comando recusado', message.error);
-        } else if (message.status === 'accepted') {
+      if (message.type === 'ack' && message.status === 'accepted') {
+        if (command.state === 'waiting_ack') {
           clearTimeout(command.timer);
           command.state = 'waiting_response';
           command.timer = setTimeout(() => command_service.timeout(command.id), CONFIG_TIMEOUTS.RESPONSE_TIMEOUT_MS);
           UIController.render();
         }
+        return;
       }
-      if (message.type === 'error' || (message.type === 'response' && command.state === 'waiting_response')) {
-        command_service.finish(command);
+      const rejected = message.type === 'ack' && message.status === 'rejected' && command.state === 'waiting_ack';
+      const finalResponse = message.type === 'response' && ['success', 'failure'].includes(message.status);
+      if (!rejected && !finalResponse && message.type !== 'error') return;
+      try {
+        if (rejected) {
+          UIController.commandFeedback(command.action, 'A última solicitação foi recusada.');
+          this.showError('Comando recusado', message.error);
+          return;
+        }
         if (message.type === 'error' || message.status !== 'success') {
           const module = Object.keys(MODULES).find((key) => MODULES[key].action === command.action);
           if (module && message.type === 'response' && message.status === 'failure') {
             AppState.equipment.status[module] = 'error';
-            UIController.render();
           }
           UIController.commandFeedback(command.action, 'A última solicitação falhou.');
           this.showError('Falha em ' + command.action, message.error);
@@ -474,11 +512,12 @@
           ToastService.show('Confirmação incompleta', 'A resposta de ' + command.action + ' não contém os dados previstos pelo protocolo.', 'danger');
           return;
         }
-        UIController.render();
         if (!command.quiet) {
           const title = diagnostics.active?.() ? 'Confirmado pelo simulador' : 'Confirmado pelo equipamento';
           ToastService.show(title, this.successLabel(command.action));
         }
+      } finally {
+        command_service.finish(command);
       }
     },
     showError(title, error = {}) {
@@ -865,16 +904,17 @@
       const { draft, scheduleStale } = AppState.equipment;
       const locked = this.writing();
       const conflict = this.conflicted();
-      const loading = Boolean(command_service.pending('get_schedule'));
+      const loading = command_service.pending('get_schedule');
       const slotWarning = this.slotWarning(draft);
       const save = $('save-schedule');
       save.disabled = !command_service.available() || locked || loading || scheduleStale || !this.dirty() || conflict || Boolean(slotWarning);
-      $('load-schedule').disabled = !command_service.available() || loading || locked;
+      $('load-schedule').disabled = !command_service.available() || Boolean(loading) || locked;
       $('discard-schedule').hidden = !this.dirty();
       $('discard-schedule').disabled = locked;
       const status = locked ? [UIController.phase(command_service.pending('set_schedule') || command_service.pending('remove_schedule')), 'info'] :
         conflict ? ['A agenda do equipamento mudou. Descarte o rascunho para editar a versão atual.', 'warning'] :
-        loading ? ['Consultando agenda…', 'info'] : scheduleStale ? ['Consulte a agenda antes de salvar.', 'warning'] :
+        loading ? [loading.state === 'queued' ? UIController.phase(loading) : 'Consultando agenda…', 'info'] :
+        scheduleStale ? ['Consulte a agenda antes de salvar.', 'warning'] :
         slotWarning ? [slotWarning, 'warning'] :
         this.dirty() ? ['Alterações aguardando envio.', 'warning'] :
         draft ? [diagnostics.active?.() ? 'Agenda confirmada pelo simulador.' : 'Agenda confirmada pelo equipamento.', 'success'] :
@@ -1247,6 +1287,7 @@
   const UIController = {
     feedbackEquipment: null,
     phase(command) {
+      if (command?.state === 'queued') return 'Aguardando na fila…';
       return command?.state === 'waiting_ack' ? 'Aguardando ACK (máx 5s)…' : 'Executando no Arduino (máx 15s)…';
     },
     openView(view) {
@@ -1433,7 +1474,7 @@
         const running = AppState.equipment.status[module] === 'running';
         const button = $(info.button);
         button.disabled = !command_service.canActuate(info.action);
-        const activity = pending?.state === 'waiting_ack' ? 'waiting' : pending || running ? 'running' : '';
+        const activity = pending ? (pending.state === 'waiting_response' ? 'running' : 'waiting') : running ? 'running' : '';
         this.buttonText(button, pending ? this.phase(pending) : running ? 'Em operação física…' : info.caption, activity);
       }
       for (const [id, action, label] of [
@@ -1441,7 +1482,7 @@
       ]) {
         const pending = command_service.pending(action);
         $(id).disabled = !available || Boolean(pending);
-        const activity = pending ? (pending.state === 'waiting_ack' ? 'waiting' : 'running') : '';
+        const activity = pending ? (pending.state === 'waiting_response' ? 'running' : 'waiting') : '';
         this.buttonText($(id), pending ? this.phase(pending) : label, activity);
       }
       $('refresh').disabled = !available || Boolean(command_service.pending('get_status') || command_service.pending('get_telemetry'));
@@ -1460,10 +1501,9 @@
       if (icon) button.prepend(makeIcon(icon));
     },
     refresh() {
-      if (!command_service.available()) return false;
-      const status = command_service.send('get_status');
-      const telemetry = command_service.send('get_telemetry');
-      return status || telemetry;
+      if (!command_service.available() || command_service.pending('get_status') || command_service.pending('get_telemetry')) return false;
+      if (!command_service.send('get_status')) return false;
+      return command_service.send('get_telemetry');
     },
     confirmManual(action) {
       if (!command_service.canActuate(action)) return;
