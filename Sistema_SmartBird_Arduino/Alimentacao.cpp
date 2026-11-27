@@ -10,8 +10,8 @@ namespace {
 HX711 balanca;
 Servo servoComporta;
 
-constexpr uint8_t ANGULO_FECHADO = 0;
-constexpr uint8_t ANGULO_ABERTO = 90;
+constexpr uint8_t ANGULO_FECHADO = 45;
+constexpr uint8_t ANGULO_ABERTO = 0;
 constexpr unsigned long INTERVALO_LEITURA_MS = 250UL;
 constexpr unsigned long TEMPO_ESPERA_HX711_MS = 5000UL;
 
