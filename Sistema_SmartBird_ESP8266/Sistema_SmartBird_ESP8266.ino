@@ -48,7 +48,7 @@ PubSubClient client(espClient);
 SoftwareSerial portaMega(14, 12);
 
 // Mesma velocidade configurada no Arduino Mega
-const uint32_t UART_BAUD = 4800;
+const uint32_t UART_BAUD = 9600;
 
 // =============================================================
 // 4. BUFFER E FILA DE JSONS
@@ -98,12 +98,10 @@ unsigned long ultimaFalhaPublicacao = 0;
 
 bool primeiraTentativaMQTT = true;
 
-// Estado de conectividade enviado ao Mega pela UART.
-const unsigned long INTERVALO_STATUS_CONECTIVIDADE = 5000;
-unsigned long ultimoStatusConectividade = 0;
-bool statusConectividadeInicializado = false;
-bool ultimoEstadoWiFi = false;
-bool ultimoEstadoMQTT = false;
+// Envia o status uma vez por conexao MQTT estabelecida.
+// A flag e liberada quando o MQTT desconecta, permitindo novo envio
+// somente depois de uma reconexao.
+bool conectividadeEnviadaNestaConexao = false;
 
 // =============================================================
 // 6. VERIFICACAO BASICA DO JSON
@@ -427,34 +425,28 @@ void enviarEstadoConectividade() {
   bool wifiConectado = (WiFi.status() == WL_CONNECTED);
   bool mqttConectado = wifiConectado && client.connected();
 
-  bool houveMudanca = !statusConectividadeInicializado ||
-                      wifiConectado != ultimoEstadoWiFi ||
-                      mqttConectado != ultimoEstadoMQTT;
+  // Aguarda a conexao MQTT. Se ela cair, prepara um novo envio
+  // para quando a proxima conexao for estabelecida.
+  if (!mqttConectado) {
+    conectividadeEnviadaNestaConexao = false;
+    return;
+  }
 
-  bool chegouHoraAtualizar =
-      millis() - ultimoStatusConectividade >=
-      INTERVALO_STATUS_CONECTIVIDADE;
+  // Nao repete o status enquanto esta mesma conexao estiver ativa.
+  if (conectividadeEnviadaNestaConexao) return;
 
-  if (!houveMudanca && !chegouHoraAtualizar) return;
+  const char mensagem[] =
+      "{\"v\":\"1.0\",\"type\":\"connectivity\",\"wifi\":true,\"mqtt\":true}";
 
-  char mensagem[80];
-  int tamanho = snprintf(
-      mensagem,
-      sizeof(mensagem),
-      "{\"v\":\"1.0\",\"type\":\"connectivity\",\"wifi\":%s,\"mqtt\":%s}",
-      wifiConectado ? "true" : "false",
-      mqttConectado ? "true" : "false"
+  size_t enviados = portaMega.write(
+      (const uint8_t*)mensagem,
+      sizeof(mensagem) - 1
   );
+  size_t newlineEnviado = portaMega.write((uint8_t)'\n');
 
-  if (tamanho <= 0 || tamanho >= (int)sizeof(mensagem)) return;
-
-  portaMega.write((const uint8_t*)mensagem, (size_t)tamanho);
-  portaMega.write((uint8_t)'\n');
-
-  ultimoEstadoWiFi = wifiConectado;
-  ultimoEstadoMQTT = mqttConectado;
-  ultimoStatusConectividade = millis();
-  statusConectividadeInicializado = true;
+  if (enviados == sizeof(mensagem) - 1 && newlineEnviado == 1) {
+    conectividadeEnviadaNestaConexao = true;
+  }
 }
 
 // =============================================================
