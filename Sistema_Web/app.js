@@ -318,7 +318,8 @@
     return message ? { code: 'SAFETY_BLOCK', message } : null;
   }
 
-  let commandCounter = BigInt(Date.now()) * 2n ** 32n + BigInt(crypto.getRandomValues(new Uint32Array(1))[0]);
+  const COMMAND_ID_COUNT = 1000;
+  let nextCommandNumber = crypto.getRandomValues(new Uint32Array(1))[0] % COMMAND_ID_COUNT;
   const command_service = {
     activeCommand: null,
     available() {
@@ -373,8 +374,12 @@
         }
         data = schedule;
       }
-      const id = (action === 'sync_time' ? 'sync-' : 'cmd-') + (++commandCounter).toString();
-      const payload = this.serialize(id, action, data);
+      let id;
+      do {
+        id = String(nextCommandNumber).padStart(3, '0');
+        nextCommandNumber = (nextCommandNumber + 1) % COMMAND_ID_COUNT;
+      } while (pendingCommands.has(id));
+      const payload = JSON.stringify({ v: '1.0', type: 'command', id, source: 'web', action, data });
       if (new TextEncoder().encode(payload).length > MAX_PAYLOAD_BYTES) {
         ToastService.show('Comando muito grande', 'O pacote excede o limite de 1024 bytes.', 'danger');
         return false;
@@ -1707,7 +1712,7 @@
         AppState.equipment.status = {};
       }
       UIController.render();
-      //if (command_service.available()) mqtt_client.initialize();
+      if (command_service.available()) mqtt_client.initialize();
       if (!enabled) event_handler.review();
     },
     emit(type, fields) {
@@ -1752,7 +1757,7 @@
       const watering = command.action === 'water_manual';
       const feeding = command.action === 'feed_manual';
       this.after(400, () => {
-        if (!pendingCommands.has(command.id)) return;
+        if (pendingCommands.get(command.id) !== command) return;
         const telemetry = watering ? this.telemetry() : null;
         let error = null;
         if (watering) error = this.wateringError(telemetry, true);
@@ -1769,7 +1774,7 @@
         }
       });
       this.after(2000, () => {
-        if (!pendingCommands.has(command.id)) return;
+        //if (pendingCommands.get(command.id) !== command) return;
         if (watering) {
           const telemetry = this.telemetry();
           const error = this.pumpFailure ? this.pumpError() : this.wateringError(telemetry, false);
