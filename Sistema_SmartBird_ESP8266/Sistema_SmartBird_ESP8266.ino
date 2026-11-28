@@ -65,7 +65,11 @@ char bufferUART[MAX_JSON + 1];
 size_t posicaoUART = 0;
 
 bool descartando = false;
-unsigned long ultimoByteUART = 0;
+unsigned long ultimaAtividadeUART = 0;
+
+// Copia o comando enquanto o payload do PubSubClient ainda e valido.
+uint8_t bufferComando[MAX_JSON];
+size_t tamanhoComandoPendente = 0;
 
 // Cada posicao guarda um JSON completo
 struct Mensagem {
@@ -90,8 +94,10 @@ const char* avisoUART = nullptr;
 const unsigned long INTERVALO_MQTT = 5000;
 const unsigned long INTERVALO_WIFI = 10000;
 const unsigned long SILENCIO_UART = 150;
+const unsigned long ESPERA_INICIO_RESPOSTA_UART = 500;
 const unsigned long TIMEOUT_UART = 3000;
 
+unsigned long silencioNecessarioUART = SILENCIO_UART;
 unsigned long ultimaTentativaMQTT = 0;
 unsigned long ultimaTentativaWiFi = 0;
 unsigned long ultimaFalhaPublicacao = 0;
@@ -218,7 +224,8 @@ void lerDadosDoMega() {
 
     char caractere = (char)recebido;
 
-    ultimoByteUART = millis();
+    ultimaAtividadeUART = millis();
+    silencioNecessarioUART = SILENCIO_UART;
 
     // FINAL DA MENSAGEM
     if (caractere == '\n') {
@@ -278,7 +285,7 @@ void lerDadosDoMega() {
 
   // Recuperar caso uma linha fique incompleta
   if ((posicaoUART > 0 || descartando) &&
-      millis() - ultimoByteUART >= TIMEOUT_UART) {
+      millis() - ultimaAtividadeUART >= TIMEOUT_UART) {
 
     posicaoUART = 0;
     descartando = false;
@@ -297,7 +304,7 @@ bool uartLivre() {
 
   if (posicaoUART > 0 || descartando) return false;
 
-  return millis() - ultimoByteUART >= SILENCIO_UART;
+  return millis() - ultimaAtividadeUART >= silencioNecessarioUART;
 }
 
 // =============================================================
@@ -394,20 +401,30 @@ void callback(char* topic, byte* payload,
     }
   }
 
+  memcpy(bufferComando, payload, length);
+  tamanhoComandoPendente = length;
+}
+
+void enviarComandoPendente() {
+  if (tamanhoComandoPendente == 0 || !uartLivre()) return;
+
   Serial.println();
   Serial.println("[MQTT -> MEGA] JSON recebido:");
 
   // Mostra o payload sem criar Strings adicionais
-  Serial.write(payload, length);
+  Serial.write(bufferComando, tamanhoComandoPendente);
   Serial.println();
 
   Serial.println("[UART] Enviando para o Mega...");
 
-  size_t enviados = portaMega.write(payload, length);
+  const size_t enviados = portaMega.write(bufferComando, tamanhoComandoPendente);
+  const bool enviado = enviados == tamanhoComandoPendente &&
+      portaMega.write((uint8_t)'\n') == 1;
+  tamanhoComandoPendente = 0;
+  ultimaAtividadeUART = millis();
+  silencioNecessarioUART = ESPERA_INICIO_RESPOSTA_UART;
 
-  if (enviados == length &&
-      portaMega.write((uint8_t)'\n') == 1) {
-
+  if (enviado) {
     Serial.println("[UART] Envio concluido!");
 
   } else {
@@ -421,6 +438,8 @@ void callback(char* topic, byte* payload,
 // =============================================================
 
 void enviarEstadoConectividade() {
+
+  if (!uartLivre()) return;
 
   bool wifiConectado = (WiFi.status() == WL_CONNECTED);
   bool mqttConectado = wifiConectado && client.connected();
@@ -443,6 +462,8 @@ void enviarEstadoConectividade() {
       sizeof(mensagem) - 1
   );
   size_t newlineEnviado = portaMega.write((uint8_t)'\n');
+  ultimaAtividadeUART = millis();
+  silencioNecessarioUART = SILENCIO_UART;
 
   if (enviados == sizeof(mensagem) - 1 && newlineEnviado == 1) {
     conectividadeEnviadaNestaConexao = true;
@@ -514,6 +535,7 @@ void reconnect() {
         mqtt_user,
         mqtt_pass)) {
 
+    conectividadeEnviadaNestaConexao = false;
     Serial.println("Conectado!");
 
     if (client.subscribe(topico_comandos, 1)) {
@@ -593,39 +615,28 @@ void setup() {
 // =============================================================
 
 void loop() {
-
-  // 1. Receber e separar mensagens do Mega
   lerDadosDoMega();
-
-  // 2. Gerenciar Wi-Fi
-  gerenciarWiFi();
-
-  // 3. Processar mensagens MQTT
-  if (client.connected()) {
-    client.loop();
+  if (!uartLivre()) {
+    yield();
+    return;
   }
 
-  // 4. Ler novamente apos MQTT
-  lerDadosDoMega();
-
-  // 5. Mostrar JSON recebido, depois de concluir a UART
   mostrarJSONRecebido();
-
-  // 6. Publicar mensagem completa no EMQX
   publicarFila();
-
-  // 7. Verificar novos bytes
+  mostrarAvisos();
   lerDadosDoMega();
 
-  // 8. Reconectar MQTT quando necessario
+  gerenciarWiFi();
   reconnect();
-
-  // 9. Informar ao Mega os estados atuais de Wi-Fi e MQTT
+  if (tamanhoComandoPendente == 0 && uartLivre() && client.connected()) {
+    client.loop();
+  }
+  lerDadosDoMega();
   enviarEstadoConectividade();
 
-  // 10. Mostrar apenas avisos eventuais
-  mostrarAvisos();
-
+  // client.loop() pode enviar um PUBACK por TLS depois do callback.
+  // Inicia a troca UART so depois da rede e le a resposta no proximo loop.
+  enviarComandoPendente();
   yield();
 }
 
