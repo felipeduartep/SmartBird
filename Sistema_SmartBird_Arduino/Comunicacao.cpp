@@ -1,5 +1,4 @@
 #include "Comunicacao.h"
-#include <string.h>
 
 // Buffer interno de recepção.
 static char bufferRecepcao[TAMANHO_BUFFER_MENSAGEM];
@@ -31,19 +30,18 @@ void inicializarComunicacao() {
 // RECEBER MENSAGEM
 // ==========================================
 
-bool receberMensagem(char* destino, size_t capacidade) {
-
-    if (destino == nullptr || capacidade < TAMANHO_BUFFER_MENSAGEM) {
-        return false;
-    }
-
+Stream& portaComunicacao() {
 #if SMARTBIRD_COMUNICACAO_USB
-    while (Serial.available() > 0) {
-        char caractere = Serial.read();
+    return Serial;
 #else
-    while (Serial1.available() > 0) {
-        char caractere = Serial1.read();
+    return Serial1;
 #endif
+}
+
+const char* receberMensagem() {
+    Stream& porta = portaComunicacao();
+    while (porta.available() > 0) {
+        const char caractere = porta.read();
 
         // Final da mensagem.
         if (caractere == '\n') {
@@ -60,16 +58,8 @@ bool receberMensagem(char* destino, size_t capacidade) {
             }
 
             bufferRecepcao[indiceRecepcao] = '\0';
-
-            memcpy(
-                destino,
-                bufferRecepcao,
-                indiceRecepcao + 1
-            );
-
             indiceRecepcao = 0;
-
-            return true;
+            return bufferRecepcao;
         }
 
         // Ignora o CR usado em finais de linha CRLF.
@@ -95,63 +85,7 @@ bool receberMensagem(char* destino, size_t capacidade) {
         indiceRecepcao++;
     }
 
-    return false;
-}
-
-// ==========================================
-// ENVIAR MENSAGEM
-// ==========================================
-
-bool enviarMensagem(const char* mensagem) {
-
-    if (mensagem == nullptr) {
-        return false;
-    }
-
-    size_t tamanho = strlen(mensagem);
-
-    if (tamanho == 0 || tamanho > MAX_BYTES_MENSAGEM) {
-        return false;
-    }
-
-    // Não permite enviar várias mensagens em uma única chamada.
-    if (strchr(mensagem, '\n') != nullptr ||
-        strchr(mensagem, '\r') != nullptr) {
-        return false;
-    }
-
-#if SMARTBIRD_COMUNICACAO_USB
-
-    Serial.println("[COMUNICACAO] Enviando pela USB...");
-
-    Serial.write(
-        reinterpret_cast<const uint8_t*>(mensagem),
-        tamanho
-    );
-    Serial.write('\n');
-
-#else
-
-    Serial.println();
-    Serial.println("========== UART MEGA -> ESP8266 ==========");
-    Serial.println("[UART TX] Mensagem que sera enviada:");
-    Serial.println(mensagem);
-    Serial.print("[UART TX] Bytes: ");
-    Serial.println(tamanho);
-
-    Serial1.write(
-        reinterpret_cast<const uint8_t*>(mensagem),
-        tamanho
-    );
-
-    Serial1.write('\n');
-
-    Serial.println("[UART TX] Transmissao solicitada.");
-    Serial.println("==========================================");
-
-#endif
-
-    return true;
+    return nullptr;
 }
 
 // ==========================================

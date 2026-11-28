@@ -112,6 +112,7 @@ struct ConfiguracaoSistema {
 
 struct DadosSistema {
     EstadoSistema estado = EstadoSistema::INICIALIZANDO;
+    bool rtcDisponivel = false;
 
     // Estado de conectividade informado pelo ESP8266.
     bool conectividadeRecebida = false;

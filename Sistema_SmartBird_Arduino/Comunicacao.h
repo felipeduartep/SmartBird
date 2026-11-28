@@ -17,11 +17,12 @@ constexpr size_t TAMANHO_BUFFER_MENSAGEM = MAX_BYTES_MENSAGEM + 1;
 // Inicializa a comunicação.
 void inicializarComunicacao();
 
-// Recebe uma mensagem completa terminada em \n.
-bool receberMensagem(char* destino, size_t capacidade);
+// Retorna uma linha completa sem o terminador, válida até a próxima chamada.
+// Retorna nullptr quando ainda não há uma mensagem completa.
+const char* receberMensagem();
 
-// Envia uma mensagem terminada em \n.
-bool enviarMensagem(const char* mensagem);
+// Porta usada para receber e enviar as linhas do protocolo.
+Stream& portaComunicacao();
 
 // Consulta e limpa o indicador de overflow.
 bool houveOverflowComunicacao();

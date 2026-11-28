@@ -63,24 +63,28 @@ const char* estadoRecipienteAguaTexto(EstadoRecipienteAgua e) {
 // ENVIO DE MENSAGENS
 // =====================================================
 
-bool enviarDocumento(JsonDocument& doc) {
-    static char buffer[TAMANHO_BUFFER_MENSAGEM];
+bool enviarDocumento(const JsonDocument& doc) {
+    if (doc.overflowed()) {
+        return false;
+    }
 
-    size_t tamanho = measureJson(doc);
-
+    const size_t tamanho = measureJson(doc);
     if (tamanho == 0 || tamanho > MAX_BYTES_MENSAGEM) {
         return false;
     }
 
-    size_t gravados = serializeJson(doc, buffer, sizeof(buffer));
+#if !SMARTBIRD_COMUNICACAO_USB
+    Serial.println(F("[UART TX] Mensagem que sera enviada:"));
+    serializeJson(doc, Serial);
+    Serial.println();
+    Serial.print(F("[UART TX] Bytes: "));
+    Serial.println(tamanho);
+#endif
 
-    if (gravados == 0 || gravados > MAX_BYTES_MENSAGEM) {
-        return false;
-    }
-
-    buffer[gravados] = '\0';
-
-    return enviarMensagem(buffer);
+    Stream& porta = portaComunicacao();
+    const size_t gravados = serializeJson(doc, porta);
+    const bool terminadorEnviado = porta.write('\n') == 1;
+    return gravados == tamanho && terminadorEnviado;
 }
 
 void enviarErro(
@@ -113,16 +117,11 @@ void enviarAck(const char* id, const char* status) {
     resposta["source"] = "arduino";
     resposta["status"] = status;
 
-    Serial.print("[ACK] Tentando enviar: ");
-    Serial.println(status);
-
-    bool enviado = enviarDocumento(resposta);
-
-    if (enviado) {
-      Serial.println("[ACK] Mensagem encaminhada para comunicacao.");
-    } else {
-      Serial.println("[ERRO] Falha ao montar ou enviar ACK!");
-}
+    if (!enviarDocumento(resposta)) {
+#if !SMARTBIRD_COMUNICACAO_USB
+        Serial.println(F("[ERRO] Falha ao montar ou enviar ACK!"));
+#endif
+    }
 }
 
 void enviarResponseDados(const char* id, JsonDocument& dados) {
@@ -247,12 +246,12 @@ void responderStatus(const char* id, const DadosSistema& dados) {
     data["maintenance"] =
         dados.manutencao.alertaAtivo ? "alert" : "normal";
 
-    DateTime agora;
+    data["rtc"] = dados.rtcDisponivel ? "available" : "failure";
 
-    data["rtc"] =
-        obterDataHora(agora) ? "available" : "failure";
-
-    enviarDocumento(resposta);
+    if (!enviarDocumento(resposta)) {
+        resposta.clear();
+        enviarErro(id, "INTERNAL_ERROR", "Could not send status response");
+    }
 }
 
 // =====================================================
@@ -617,8 +616,6 @@ void processarMensagem(
     DadosSistema& dados
 ) {
 
-    Serial.println("[PROTOCOLO] Iniciando analise da mensagem...");
-
     if (!mensagem || !*mensagem) {
         enviarErro(nullptr, "INVALID_MESSAGE", "Empty message");
         return;
@@ -630,24 +627,15 @@ void processarMensagem(
         deserializeJson(requisicao, mensagem);
 
     if (erroJson) {
-      Serial.println("[ERRO] JSON invalido!");
-      enviarErro(nullptr, "INVALID_JSON", "JSON could not be parsed");
-      return;
+        enviarErro(nullptr, "INVALID_JSON", "JSON could not be parsed");
+        return;
     }
-
-    Serial.println("[PROTOCOLO] JSON interpretado com sucesso.");
 
     const char* versao = requisicao["v"] | "";
     const char* tipo = requisicao["type"] | "";
     const char* id = requisicao["id"] | "";
     const char* origem = requisicao["source"] | "";
     const char* acao = requisicao["action"] | "";
-
-    Serial.print("[PROTOCOLO] ID: ");
-    Serial.println(id);
-
-    Serial.print("[PROTOCOLO] Acao: ");
-    Serial.println(acao);
 
     if (strcmp(versao, "1.0") != 0) {
         enviarErro(
@@ -662,7 +650,9 @@ void processarMensagem(
     if (strcmp(tipo, "connectivity") == 0) {
         if (!requisicao["wifi"].is<bool>() ||
             !requisicao["mqtt"].is<bool>()) {
+#if !SMARTBIRD_COMUNICACAO_USB
             Serial.println(F("[PROTOCOLO] Status de conectividade invalido."));
+#endif
             return;
         }
 
@@ -995,10 +985,13 @@ void processarMensagem(
 
         DateTime dataHora(2000, 1, 1, 0, 0, 0);
 
-        if (
-            !parseDateTimeLocal(valorDataHora, dataHora) ||
-            !ajustarDataHora(dataHora)
-        ) {
+        if (!parseDateTimeLocal(valorDataHora, dataHora)) {
+            enviarAck(id, "rejected");
+            return;
+        }
+
+        dados.rtcDisponivel = ajustarDataHora(dataHora);
+        if (!dados.rtcDisponivel) {
 
             enviarAck(id, "rejected");
             return;

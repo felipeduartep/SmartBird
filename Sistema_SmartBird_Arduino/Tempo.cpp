@@ -1,3 +1,4 @@
+#include <Adafruit_I2CDevice.h>
 #include <Wire.h>
 #include "Tempo.h"
 
@@ -5,9 +6,25 @@
 // OBJETO RTC
 // ==========================================
 
-static RTC_DS1307 rtc;
+namespace {
+constexpr uint8_t ENDERECO_RTC = 0x68;
+constexpr uint8_t REGISTRO_SEGUNDOS_RTC = 0;
+constexpr uint8_t BIT_OSCILADOR_PARADO = 0x80;
 
-static bool rtcInicializado = false;
+Adafruit_I2CDevice rtc(ENDERECO_RTC);
+bool rtcInicializado = false;
+
+uint8_t deBCD(uint8_t valor) {
+  uint8_t dezenas = valor >> 4;
+  uint8_t unidades = valor & 0x0F;
+  if (dezenas > 9 || unidades > 9) return UINT8_MAX;
+  return dezenas * 10 + unidades;
+}
+
+uint8_t paraBCD(uint8_t valor) {
+  return (valor / 10) * 16 + (valor % 10);
+}
+}
 
 // ==========================================
 // INICIALIZAÇÃO
@@ -15,9 +32,10 @@ static bool rtcInicializado = false;
 
 bool inicializarTempo() {
 
-  Wire.begin();
-
-  rtcInicializado = rtc.begin();
+  // O LCD compartilha o mesmo barramento I2C.
+  Wire.setWireTimeout(25000UL, true);
+  // Cada leitura verifica o RTC, inclusive após uma falha na inicialização.
+  rtcInicializado = rtc.begin(false);
 
   return rtcInicializado;
 }
@@ -32,12 +50,26 @@ bool obterDataHora(DateTime& agora) {
     return false;
   }
 
-  // Verifica se o oscilador do RTC está funcionando
-  if (!rtc.isrunning()) {
+  // Lê os registradores em uma única transação e verifica o retorno do I2C.
+  uint8_t registros[7] = { REGISTRO_SEGUNDOS_RTC };
+  Wire.clearWireTimeoutFlag();
+  if (!rtc.write_then_read(registros, 1, registros, sizeof(registros)) || Wire.getWireTimeoutFlag()) {
+    return false;
+  }
+  if (registros[0] & BIT_OSCILADOR_PARADO) {
     return false;
   }
 
-  agora = rtc.now();
+  uint8_t mes = deBCD(registros[5]);
+  if (mes < 1 || mes > 12) {
+    return false;
+  }
+  DateTime dataHora(2000U + deBCD(registros[6]), mes, deBCD(registros[4]),
+                    deBCD(registros[2]), deBCD(registros[1]), deBCD(registros[0]));
+  if (!dataHora.isValid()) {
+    return false;
+  }
+  agora = dataHora;
 
   return true;
 }
@@ -48,13 +80,28 @@ bool obterDataHora(DateTime& agora) {
 
 bool ajustarDataHora(const DateTime& novaDataHora) {
 
-  if (!rtcInicializado) {
+  if (!rtcInicializado || novaDataHora.month() < 1 || novaDataHora.month() > 12 ||
+      !novaDataHora.isValid()) {
     return false;
   }
 
-  rtc.adjust(novaDataHora);
+  const uint8_t registros[] = {
+    REGISTRO_SEGUNDOS_RTC,
+    paraBCD(novaDataHora.second()),
+    paraBCD(novaDataHora.minute()),
+    paraBCD(novaDataHora.hour()),
+    static_cast<uint8_t>(novaDataHora.dayOfTheWeek() + 1),
+    paraBCD(novaDataHora.day()),
+    paraBCD(novaDataHora.month()),
+    paraBCD(novaDataHora.year() - 2000U)
+  };
+  Wire.clearWireTimeoutFlag();
+  if (!rtc.write(registros, sizeof(registros)) || Wire.getWireTimeoutFlag()) {
+    return false;
+  }
 
-  return rtc.isrunning();
+  DateTime agora;
+  return obterDataHora(agora);
 }
 
 

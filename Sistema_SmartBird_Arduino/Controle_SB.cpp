@@ -15,7 +15,6 @@ static DadosSistema dados;
 static bool controleInicializado = false;
 static bool falhaInicializacao = false;
 static unsigned long ultimaVerificacaoRTC = 0;
-static bool rtcDisponivelAtual = false;
 static int8_t horarioAlimentacaoEmExecucao = -1;
 static int8_t horarioHidratacaoEmExecucao = -1;
 
@@ -25,7 +24,7 @@ void atualizarEstadoGeral() {
         dados.alimentacao.estado == EstadoAlimentacao::ERRO ||
         dados.hidratacao.estado == EstadoHidratacao::ERRO;
 
-    const bool rtcOk = rtcDisponivelAtual;
+    const bool rtcOk = dados.rtcDisponivel;
 
     const bool alertaReservatorio =
         !dados.reservatorioAlimento.dados.leituraValida ||
@@ -58,8 +57,8 @@ void processarAgendamentos() {
     ultimaVerificacaoRTC = millisAgora;
 
     DateTime agora;
-    rtcDisponivelAtual = obterDataHora(agora);
-    if (!rtcDisponivelAtual) return;
+    dados.rtcDisponivel = obterDataHora(agora);
+    if (!dados.rtcDisponivel) return;
 
     verificarAgendamentos(dados, agora);
 
@@ -142,20 +141,23 @@ void inicializarControle() {
 
     // Recupera configuracoes persistentes antes de inicializar os modulos.
     const bool dadosRecuperados = carregarDadosPersistidos(dados);
+#if !SMARTBIRD_COMUNICACAO_USB
     Serial.println(dadosRecuperados
         ? F("[EEPROM] Configuracoes recuperadas.")
         : F("[EEPROM] Nenhum registro valido; usando padroes."));
+#else
+    (void)dadosRecuperados;
+#endif
 
     falhaInicializacao = false;
     inicializarReservatorios();
 
     if (!inicializarAlimentacao(dados.configuracaoAlimentacao)) falhaInicializacao = true;
     if (!inicializarHidratacao()) falhaInicializacao = true;
-    if (!inicializarTempo()) {
-        // RTC indisponível gera alerta, não impede funções locais manuais.
-    } else {
+    // RTC indisponível gera alerta, mas mantém as funções manuais ativas.
+    if (inicializarTempo()) {
         DateTime agora;
-        rtcDisponivelAtual = obterDataHora(agora);
+        dados.rtcDisponivel = obterDataHora(agora);
     }
     if (!inicializarManutencao()) falhaInicializacao = true;
 
@@ -173,24 +175,16 @@ void inicializarControle() {
 void atualizarControle() {
     if (!controleInicializado) return;
 
-    char mensagem[TAMANHO_BUFFER_MENSAGEM];
-
-if (receberMensagem(mensagem, sizeof(mensagem))) {
-
-    Serial.println();
-    Serial.println("[UART] Mensagem recebida:");
-    Serial.println(mensagem);
-
-    Serial.println("[PROTOCOLO] Encaminhando para processamento...");
-
-    processarMensagem(mensagem, dados);
-
-    Serial.println("[PROTOCOLO] Processamento finalizado.");
-}
-
-if (houveOverflowComunicacao()) {
-    Serial.println("[ERRO] Overflow na comunicacao!");
-}
+    if (const char* mensagem = receberMensagem()) {
+#if !SMARTBIRD_COMUNICACAO_USB
+        Serial.println(F("[UART] Mensagem recebida:"));
+        Serial.println(mensagem);
+#endif
+        processarMensagem(mensagem, dados);
+#if !SMARTBIRD_COMUNICACAO_USB
+        Serial.println(F("[PROTOCOLO] Processamento finalizado."));
+#endif
+    }
 
     if (houveOverflowComunicacao()) {
 #if !SMARTBIRD_COMUNICACAO_USB

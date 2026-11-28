@@ -15,11 +15,13 @@
 
 namespace {
 // Endereco comum de LCD I2C. Ajustar para 0x3F se o modulo usar esse endereco.
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+constexpr uint8_t ENDERECO_LCD = 0x27;
+LiquidCrystal_I2C lcd(ENDERECO_LCD, 16, 2);
 
 
 constexpr unsigned long DEBOUNCE_MS = 35UL;
 constexpr unsigned long INTERVALO_TELA_MS = 250UL;
+constexpr unsigned long INTERVALO_TENTATIVA_LCD_MS = 5000UL;
 constexpr unsigned long INTERVALO_LED_MS = 500UL;
 constexpr unsigned long DURACAO_BIP_MS = 65UL;
 
@@ -54,6 +56,7 @@ uint8_t bipsRestantes = 0;
 bool buzzerEmite = false;
 bool ledPisca = false;
 bool telaSuja = true;
+bool lcdInicializado = false;
 char mensagemLinha1[17] = "";
 char mensagemLinha2[17] = "";
 
@@ -111,11 +114,32 @@ bool lerBotao(uint8_t indice) {
     return resultado;
 }
 
+bool prepararLcd() {
+    Wire.clearWireTimeoutFlag();
+    Wire.beginTransmission(ENDERECO_LCD);
+    if (Wire.endTransmission() != 0 || Wire.getWireTimeoutFlag()) {
+        lcdInicializado = false;
+        return false;
+    }
+    if (!lcdInicializado) {
+        lcd.init();
+        if (!Wire.getWireTimeoutFlag()) lcd.backlight();
+        lcdInicializado = !Wire.getWireTimeoutFlag();
+    }
+    return lcdInicializado;
+}
+
 void escreverLinha(uint8_t linha, const char* texto) {
+    if (!lcdInicializado) return;
     char buffer[17];
     snprintf(buffer, sizeof(buffer), "%-16.16s", texto ? texto : "");
+    // O RTC compartilha o barramento. Considera apenas timeouts desta escrita.
+    Wire.clearWireTimeoutFlag();
     lcd.setCursor(0, linha);
-    lcd.print(buffer);
+    for (uint8_t i = 0; buffer[i] && !Wire.getWireTimeoutFlag(); ++i) {
+        lcd.print(buffer[i]);
+    }
+    lcdInicializado = !Wire.getWireTimeoutFlag();
 }
 
 void mostrarMensagem(const char* linha1, const char* linha2) {
@@ -376,11 +400,11 @@ void inicializarInterface(DadosSistema& dados) {
     digitalWrite(LED_SISTEMA, LOW); digitalWrite(LED_ACAO, LOW);
     digitalWrite(LED_AVISO, LOW); digitalWrite(LED_CRITICO, LOW);
     noTone(BUZZER_INTERFACE);
-    Wire.begin();
-    lcd.init();
-    lcd.backlight();
-    escreverLinha(0, "SmartBird v1.0");
-    escreverLinha(1, "Iniciando...");
+    if (prepararLcd()) {
+        escreverLinha(0, "SmartBird v1.0");
+        escreverLinha(1, "Iniciando...");
+    }
+    ultimaAtualizacaoTela = millis();
     bip(2200, 1);
     telaSuja = true;
 }
@@ -392,10 +416,13 @@ void atualizarInterface(DadosSistema& dados) {
     tratarBotoes(dados, ant, ok, prox);
     atualizarLeds(dados);
     atualizarBuzzer();
-    unsigned long agora = millis();
-    if (telaSuja || agora - ultimaAtualizacaoTela >= INTERVALO_TELA_MS) {
-        ultimaAtualizacaoTela = agora;
+    const unsigned long decorrido = millis() - ultimaAtualizacaoTela;
+    // A inicializacao do LCD tem uma espera interna de cerca de um segundo.
+    if (!lcdInicializado && (decorrido < INTERVALO_TENTATIVA_LCD_MS || haOperacaoAtiva(dados))) return;
+    if (lcdInicializado && !telaSuja && decorrido < INTERVALO_TELA_MS) return;
+    if (prepararLcd()) {
         desenharTela(dados);
         telaSuja = false;
     }
+    ultimaAtualizacaoTela = millis();
 }
