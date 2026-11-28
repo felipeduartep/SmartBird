@@ -1,0 +1,224 @@
+{
+  "Landingpage_SmartBird/landing.js": {
+    "mtime": 1795816968.5031068,
+    "seen": 1795817804.2247074,
+    "ast_hash": "2bbd0a96adc167198bcae19be2ec76d3",
+    "semantic_hash": "2bbd0a96adc167198bcae19be2ec76d3"
+  },
+  "Sistema_SmartBird_Arduino/Alimentacao.cpp": {
+    "mtime": 1795816968.5041058,
+    "seen": 1795817804.2247126,
+    "ast_hash": "d3d9bf56959b5f257d74e23bab2e30aa",
+    "semantic_hash": "d3d9bf56959b5f257d74e23bab2e30aa"
+  },
+  "Sistema_SmartBird_Arduino/Alimentacao.h": {
+    "mtime": 1795816968.5051064,
+    "seen": 1795817804.2247155,
+    "ast_hash": "f783619477d14dd84d6e74c2ebf587e2",
+    "semantic_hash": "f783619477d14dd84d6e74c2ebf587e2"
+  },
+  "Sistema_SmartBird_Arduino/Comunicacao.cpp": {
+    "mtime": 1795816968.5061069,
+    "seen": 1795817804.224717,
+    "ast_hash": "4e55acece4bc05833b644a99f701e00d",
+    "semantic_hash": "4e55acece4bc05833b644a99f701e00d"
+  },
+  "Sistema_SmartBird_Arduino/Comunicacao.h": {
+    "mtime": 1795816968.507107,
+    "seen": 1795817804.2247179,
+    "ast_hash": "423e675eafff44500d045bc8ea62cb21",
+    "semantic_hash": "423e675eafff44500d045bc8ea62cb21"
+  },
+  "Sistema_SmartBird_Arduino/Controle_SB.cpp": {
+    "mtime": 1795816968.5081072,
+    "seen": 1795817804.2247186,
+    "ast_hash": "5a93f52672cef31d04b6cf5cb5b617aa",
+    "semantic_hash": "5a93f52672cef31d04b6cf5cb5b617aa"
+  },
+  "Sistema_SmartBird_Arduino/Controle_SB.h": {
+    "mtime": 1795816968.5091064,
+    "seen": 1795817804.2247195,
+    "ast_hash": "3af8006828f8c6ef562977a02e1c897a",
+    "semantic_hash": "3af8006828f8c6ef562977a02e1c897a"
+  },
+  "Sistema_SmartBird_Arduino/Estado_SB.h": {
+    "mtime": 1795816968.5103514,
+    "seen": 1795817804.2247205,
+    "ast_hash": "e9d8c603c0c9b263ce6fb5ddfe97ce7f",
+    "semantic_hash": "e9d8c603c0c9b263ce6fb5ddfe97ce7f"
+  },
+  "Sistema_SmartBird_Arduino/Hardware_SB.h": {
+    "mtime": 1795816968.5103514,
+    "seen": 1795817804.2247214,
+    "ast_hash": "321a4fc6f1f98da0cf5bfdfa282c316f",
+    "semantic_hash": "321a4fc6f1f98da0cf5bfdfa282c316f"
+  },
+  "Sistema_SmartBird_Arduino/Hidratacao.cpp": {
+    "mtime": 1795816968.5113356,
+    "seen": 1795817804.2247221,
+    "ast_hash": "26cdf9dff9c085f4eefa0aed22acd985",
+    "semantic_hash": "26cdf9dff9c085f4eefa0aed22acd985"
+  },
+  "Sistema_SmartBird_Arduino/Hidratacao.h": {
+    "mtime": 1795816968.5123363,
+    "seen": 1795817804.224723,
+    "ast_hash": "561729796033184f3e2a154c09a7403d",
+    "semantic_hash": "561729796033184f3e2a154c09a7403d"
+  },
+  "Sistema_SmartBird_Arduino/Interface.cpp": {
+    "mtime": 1795816968.513335,
+    "seen": 1795817804.2247243,
+    "ast_hash": "a0dc7e2031f2b2d28e28fd49a45b7843",
+    "semantic_hash": "a0dc7e2031f2b2d28e28fd49a45b7843"
+  },
+  "Sistema_SmartBird_Arduino/Interface.h": {
+    "mtime": 1795816968.5143356,
+    "seen": 1795817804.224725,
+    "ast_hash": "52bdcf9df94125be08bbf96183aa6495",
+    "semantic_hash": "52bdcf9df94125be08bbf96183aa6495"
+  },
+  "Sistema_SmartBird_Arduino/Manutencao.cpp": {
+    "mtime": 1795816968.515337,
+    "seen": 1795817804.2247257,
+    "ast_hash": "66ed9fe5ad25d30286ec31928f2e1e4c",
+    "semantic_hash": "66ed9fe5ad25d30286ec31928f2e1e4c"
+  },
+  "Sistema_SmartBird_Arduino/Manutencao.h": {
+    "mtime": 1795153315.7273326,
+    "seen": 1795817804.2247264,
+    "ast_hash": "d9298c2ea006a65fc92f82fbc0253cfc",
+    "semantic_hash": "d9298c2ea006a65fc92f82fbc0253cfc"
+  },
+  "Sistema_SmartBird_Arduino/Persistencia.cpp": {
+    "mtime": 1795816968.5163603,
+    "seen": 1795817804.2247276,
+    "ast_hash": "36a7640100031013e2edb1a951f88263",
+    "semantic_hash": "36a7640100031013e2edb1a951f88263"
+  },
+  "Sistema_SmartBird_Arduino/Persistencia.h": {
+    "mtime": 1795816968.5173376,
+    "seen": 1795817804.2247286,
+    "ast_hash": "b1fc49f61c1ab96426c400ded893e4cf",
+    "semantic_hash": "b1fc49f61c1ab96426c400ded893e4cf"
+  },
+  "Sistema_SmartBird_Arduino/Protocolo.cpp": {
+    "mtime": 1795816968.5183363,
+    "seen": 1795817804.224729,
+    "ast_hash": "23eaac4b2904ae312de77dc8dad8c2a7",
+    "semantic_hash": "23eaac4b2904ae312de77dc8dad8c2a7"
+  },
+  "Sistema_SmartBird_Arduino/Protocolo.h": {
+    "mtime": 1795153315.7283297,
+    "seen": 1795817804.22473,
+    "ast_hash": "fe5c70d8ee1297bd88f90f015eeec139",
+    "semantic_hash": "fe5c70d8ee1297bd88f90f015eeec139"
+  },
+  "Sistema_SmartBird_Arduino/Reservatorios.cpp": {
+    "mtime": 1795816968.5193357,
+    "seen": 1795817804.224731,
+    "ast_hash": "2847228abf3317f3d8ad23bdf6941d3e",
+    "semantic_hash": "2847228abf3317f3d8ad23bdf6941d3e"
+  },
+  "Sistema_SmartBird_Arduino/Reservatorios.h": {
+    "mtime": 1795816968.520336,
+    "seen": 1795817804.224732,
+    "ast_hash": "bfd5e2e33340c03e635c11790cfed7ba",
+    "semantic_hash": "bfd5e2e33340c03e635c11790cfed7ba"
+  },
+  "Sistema_SmartBird_Arduino/Sistema_SmartBird_Arduino.ino": {
+    "mtime": 1795816968.5213356,
+    "seen": 1795817804.2247326,
+    "ast_hash": "ac5634ad8a12e768b2faf88de877d3c3",
+    "semantic_hash": "ac5634ad8a12e768b2faf88de877d3c3"
+  },
+  "Sistema_SmartBird_Arduino/Tempo.cpp": {
+    "mtime": 1795816968.5223365,
+    "seen": 1795817804.224734,
+    "ast_hash": "6b527e5d8fb17127a2b741c22a40703c",
+    "semantic_hash": "6b527e5d8fb17127a2b741c22a40703c"
+  },
+  "Sistema_SmartBird_Arduino/Tempo.h": {
+    "mtime": 1795153315.7323296,
+    "seen": 1795817804.2247348,
+    "ast_hash": "acb8cbb845cd11625bfa2a961a07fce1",
+    "semantic_hash": "acb8cbb845cd11625bfa2a961a07fce1"
+  },
+  "Sistema_SmartBird_ESP8266/Sistema_SmartBird_ESP8266.ino": {
+    "mtime": 1795816968.523336,
+    "seen": 1795817804.2247357,
+    "ast_hash": "97ef16490a062ca1150e538c8a9eb302",
+    "semantic_hash": "97ef16490a062ca1150e538c8a9eb302"
+  },
+  "Sistema_Web/app.js": {
+    "mtime": 1795816968.5253532,
+    "seen": 1795817804.2247367,
+    "ast_hash": "0e5e3d88e1b942084a8d24b983667c0a",
+    "semantic_hash": "0e5e3d88e1b942084a8d24b983667c0a"
+  },
+  "Landingpage_SmartBird/index.html": {
+    "mtime": 1795816968.501106,
+    "seen": 1795817804.224738,
+    "ast_hash": "04ebc9349b25c81e5251c6d1ca43546a",
+    "semantic_hash": "04ebc9349b25c81e5251c6d1ca43546a"
+  },
+  "README.md": {
+    "mtime": 1795044621.1521719,
+    "seen": 1795817804.2247386,
+    "ast_hash": "8a88393ea718425d6b7a92db0c496eba",
+    "semantic_hash": "8a88393ea718425d6b7a92db0c496eba"
+  },
+  "Sistema_SmartBird_Arduino/README.md": {
+    "mtime": 1795816968.5183363,
+    "seen": 1795817804.2247393,
+    "ast_hash": "40614b370905ffdfb28fb2a6e8eb7909",
+    "semantic_hash": "40614b370905ffdfb28fb2a6e8eb7909"
+  },
+  "Sistema_Web/index.html": {
+    "mtime": 1795405525.622174,
+    "seen": 1795817804.2247403,
+    "ast_hash": "3978e123214bd06e137f705eca0dbe1f",
+    "semantic_hash": "3978e123214bd06e137f705eca0dbe1f"
+  },
+  "documenta\u00e7\u00e3o/Documento_Mestre_SmartBird2.0.md": {
+    "mtime": 1795816968.5263362,
+    "seen": 1795817804.2247422,
+    "ast_hash": "c9ada9c56ebb531a999cabca4a811fcb",
+    "semantic_hash": "c9ada9c56ebb531a999cabca4a811fcb"
+  },
+  "documenta\u00e7\u00e3o/documentacao_esp8266.md": {
+    "mtime": 1795816968.5263362,
+    "seen": 1795817804.2247431,
+    "ast_hash": "1e2b08bcafa42fac6d06f81fe0a2290e",
+    "semantic_hash": "1e2b08bcafa42fac6d06f81fe0a2290e"
+  },
+  "documenta\u00e7\u00e3o/protocolo_comunicacao_v1.md": {
+    "mtime": 1795816968.5263362,
+    "seen": 1795817804.224744,
+    "ast_hash": "043dea1539aaa44979b07be155255642",
+    "semantic_hash": "043dea1539aaa44979b07be155255642"
+  },
+  "Landingpage_SmartBird/Logo_SmartBird_web.jpg": {
+    "mtime": 1795816968.4981098,
+    "seen": 1795817804.2247453,
+    "ast_hash": "e21a275bf0f5f6307c247829de2ee0ef",
+    "semantic_hash": "e21a275bf0f5f6307c247829de2ee0ef"
+  },
+  "Landingpage_SmartBird/canario.jpg": {
+    "mtime": 1795816968.5001068,
+    "seen": 1795817804.224746,
+    "ast_hash": "10de7c159a0d611c6e6b45e3224423ea",
+    "semantic_hash": "10de7c159a0d611c6e6b45e3224423ea"
+  },
+  "Sistema_Web/Logo_SmartBird.jpg": {
+    "mtime": 1795044621.2166133,
+    "seen": 1795817804.224747,
+    "ast_hash": "c292ad2f67d400e118e59fd1ea19d6c6",
+    "semantic_hash": "c292ad2f67d400e118e59fd1ea19d6c6"
+  },
+  "Sistema_Web/Logo_SmartBird_web.jpg": {
+    "mtime": 1795044607.1544037,
+    "seen": 1795817804.2247477,
+    "ast_hash": "e21a275bf0f5f6307c247829de2ee0ef",
+    "semantic_hash": "e21a275bf0f5f6307c247829de2ee0ef"
+  }
+}
